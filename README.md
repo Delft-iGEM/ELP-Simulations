@@ -82,24 +82,44 @@ idempotently, so running prepare on any machine produces the exact same result.
 
 ## Preparing and running simulations
 
-Generate the `runtime/` folder for a simulation with:
+After `uv sync`, the `sim` CLI is available inside the venv. Activate it once:
 
 ```bash
-uv run python -m simulations.i70-surfaceattached.prepare
+source .venv/bin/activate   # Linux / macOS
+.venv\Scripts\activate      # Windows (PowerShell)
 ```
 
-You don't need the `uv` run part if you already have venv activated with `source .venv/bin/activate`
-
-This writes `runtime/run.py` along with all input files needed to launch the
-simulation. Run it locally with:
+Then use `sim` for all simulation tasks:
 
 ```bash
-uv run python -m simulations.i70-surfaceattached.runtime.run
+sim list                          # list available simulations
+sim prepare i70-surfaceattached   # generate runtime/ folder
+sim run     i70-surfaceattached   # run locally
+sim submit  i70-surfaceattached   # sbatch on DelftBlue
 ```
 
-or submit it on DelftBlue with a SLURM script that calls the same `run.py`:
+### Shell autocomplete
+
+Install completion once (detects your shell automatically — bash, zsh, fish, or PowerShell):
 
 ```bash
-cd /scratch/$USER/ELP-Simulations
-sbatch simulations/i70-surfaceattached/runtime/job.sh
+sim --install-completion
+```
+
+Restart your shell (or `source ~/.bashrc`), then **Tab** after `sim prepare ` or
+`sim run ` to autocomplete simulation names.
+
+To see the raw completion script without installing it:
+
+```bash
+sim --show-completion
+```
+
+### Running without the venv active
+
+Prefix any command with `uv run`:
+
+```bash
+uv run sim prepare i70-surfaceattached
+uv run sim run     i70-surfaceattached
 ```

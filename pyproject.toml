@@ -1,7 +1,7 @@
 [project]
 name = "elp-simulations"
 version = "0.1.0"
-description = "Add your description here"
+description = "CALVADOS / OpenMM simulations of elastin-like polypeptides (ELPs)"
 readme = "README.md"
 requires-python = ">=3.10, <3.12"
 dependencies = [
@@ -9,10 +9,23 @@ dependencies = [
     "ipykernel>=7.2.0",
     "openmm==8.2.0",
     "openmm-cuda-12==8.2.0; sys_platform == 'linux' or sys_platform == 'win32'",
+    "typer>=0.12",
 ]
 
+[project.scripts]
+sim = "tools.cli:app"
+
 [tool.uv]
-package = false
+# Keep simulations/ and tools/ importable from the project root without
+# installing them as top-level packages; only tools/ is packaged.
 
 [tool.uv.sources]
 calvados = { git = "https://github.com/KULL-Centre/CALVADOS.git" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Only install the tools/ package; simulations/ stays as local scripts.
+packages = ["tools"]
