@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=18
 #SBATCH --gpus-per-task=1
-#SBATCH --mem-per-cpu=8888
+#SBATCH --mem-per-cpu=8000
 #SBATCH --output=logs/%x-%j.out
 
 set -euo pipefail
