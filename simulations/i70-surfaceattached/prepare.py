@@ -7,6 +7,9 @@ from pathlib import Path
 from tools.elibpy import build_sequence_with_features
 
 # Parameters
+# OpenMM runs in nm where as PDB is in Angtrums so divide it by 10
+z_wall = 230 / 10
+
 def build_sim(sim: Sim):
      pass
 
@@ -32,8 +35,7 @@ sequences: dict[str, str] = {
      ])["seq"]
 }
 
-# Z-wall
-z_plane = 236
+sequences["VPGIG70"] = f"Z{sequences['VPGIG70'][1:]}"
 
 if __name__ == "__main__":
      path = Path(__file__).parent.resolve()
@@ -52,7 +54,7 @@ if __name__ == "__main__":
           ionic = 0.19,
           pH = 7.5,
           ext_force = True,
-          ext_force_expr = f'step({z_plane}-z)*.5*({z_plane}-z)^2',
+          ext_force_expr = f'step({z_wall}-z)*0.5*({z_wall}-z)^2',
           topol = 'center',
           wfreq = N_save,
           steps = N_frames*N_save,
