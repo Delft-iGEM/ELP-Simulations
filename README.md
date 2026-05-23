@@ -85,14 +85,16 @@ idempotently, so running prepare on any machine produces the exact same result.
 Generate the `runtime/` folder for a simulation with:
 
 ```bash
-python -m simulations.i70-surfaceattached.prepare
+uv run python -m simulations.i70-surfaceattached.prepare
 ```
+
+You don't need the `uv` run part if you already have venv activated with `source .venv/bin/activate`
 
 This writes `runtime/run.py` along with all input files needed to launch the
 simulation. Run it locally with:
 
 ```bash
-python -m simulations.i70-surfaceattached.runtime.run
+uv run python -m simulations.i70-surfaceattached.runtime.run
 ```
 
 or submit it on DelftBlue with a SLURM script that calls the same `run.py`:
