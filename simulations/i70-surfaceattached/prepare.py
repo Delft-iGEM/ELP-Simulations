@@ -10,6 +10,16 @@ from tools.elibpy import build_sequence_with_features
 def build_sim(sim: Sim):
      pass
 
+# Job settings for Delft Blue
+partition = "gpu-a100-small"
+runtime = "3:30:00"
+cpu_per_task = "2"
+
+# or
+# partition = "gpu-a100"
+# runtime = "24:30:00"
+# cpu_per_task = "18"
+
 sim_name = Path(__file__).parent.name
 
 L = 50
@@ -83,6 +93,10 @@ if __name__ == "__main__":
 
      job_file = (cwd / "template/job.sh").read_text()
      
-     job_file = job_file.replace("{sim_name}", sim_name)
+     job_file = job_file \
+          .replace("{sim_name}", sim_name) \
+          .replace("{partition}", partition) \
+          .replace("{runtime}", runtime) \
+          .replace("{cpu_per_task}", cpu_per_task)
 
      (runtime_dir / "job.sh").write_text(job_file)
