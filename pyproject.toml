@@ -1,0 +1,14 @@
+[project]
+name = "elp-simulations"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10, <3.12"
+dependencies = [
+    "calvados",
+    "ipykernel>=7.2.0",
+    "openmm==8.2.0"
+]
+
+[tool.uv.sources]
+calvados = { git = "https://github.com/KULL-Centre/CALVADOS.git" }
