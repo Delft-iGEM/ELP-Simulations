@@ -7,7 +7,8 @@ requires-python = ">=3.10, <3.12"
 dependencies = [
     "calvados",
     "ipykernel>=7.2.0",
-    "openmm==8.2.0"
+    "openmm==8.2.0",
+    "openmm-cuda-12==8.2.0",
 ]
 
 [tool.uv]
