@@ -95,4 +95,9 @@ simulation. Run it locally with:
 python -m simulations.i70-surfaceattached.runtime.run
 ```
 
-or submit it on DelftBlue with a SLURM script that calls the same `run.py`.
+or submit it on DelftBlue with a SLURM script that calls the same `run.py`:
+
+```bash
+cd /scratch/$USER/ELP-Simulations
+sbatch simulations/i70-surfaceattached/runtime/job.sh
+```
