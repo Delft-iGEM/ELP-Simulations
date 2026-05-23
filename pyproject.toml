@@ -8,7 +8,7 @@ dependencies = [
     "calvados",
     "ipykernel>=7.2.0",
     "openmm==8.2.0",
-    "openmm-cuda-12==8.2.0",
+    "openmm-cuda-12==8.2.0; sys_platform == 'linux' or sys_platform == 'win32'",
 ]
 
 [tool.uv]

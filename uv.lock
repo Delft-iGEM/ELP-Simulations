@@ -215,7 +215,7 @@ dependencies = [
     { name = "calvados" },
     { name = "ipykernel" },
     { name = "openmm" },
-    { name = "openmm-cuda-12" },
+    { name = "openmm-cuda-12", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [package.metadata]
@@ -223,7 +223,7 @@ requires-dist = [
     { name = "calvados", git = "https://github.com/KULL-Centre/CALVADOS.git" },
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "openmm", specifier = "==8.2.0" },
-    { name = "openmm-cuda-12", specifier = "==8.2.0" },
+    { name = "openmm-cuda-12", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==8.2.0" },
 ]
 
 [[package]]
