@@ -210,7 +210,7 @@ wheels = [
 [[package]]
 name = "elp-simulations"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "calvados" },
     { name = "ipykernel" },
