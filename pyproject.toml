@@ -10,5 +10,8 @@ dependencies = [
     "openmm==8.2.0"
 ]
 
+[tool.uv]
+package = false
+
 [tool.uv.sources]
 calvados = { git = "https://github.com/KULL-Centre/CALVADOS.git" }
