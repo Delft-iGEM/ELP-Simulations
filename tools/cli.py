@@ -5,7 +5,11 @@ Commands:
   sim prepare <simulation>   Generate the runtime/ folder (config, FASTA, job.sh, run.py)
   sim run     <simulation>   Run the simulation locally
   sim submit  <simulation>   Submit via sbatch on DelftBlue
+  sim clean   <simulation>   Delete the runtime/ folder for a simulation
   sim list                   List all available simulations
+
+Flags:
+  sim run --clean <simulation>   Delete runtime/, prepare, then run
 
 Autocomplete:
   sim --install-completion   Install shell completion (bash/zsh/fish/PowerShell)
@@ -14,6 +18,7 @@ Autocomplete:
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -80,6 +85,14 @@ def _run(cmd: list[str], cwd: Path) -> None:
         raise typer.Exit(result.returncode)
 
 
+def _clean_runtime(simulation: str, sim_path: Path) -> None:
+    """Delete the runtime/ folder for a simulation if it exists."""
+    runtime_dir = sim_path / "runtime"
+    if runtime_dir.exists():
+        shutil.rmtree(runtime_dir)
+        typer.echo(f"✓  Deleted runtime/ for {simulation}")
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -115,12 +128,26 @@ def prepare(
 @app.command()
 def run(
     simulation: SimName,
+    clean: Annotated[bool, typer.Option("--clean", help="Delete runtime/, prepare, then run.")] = False,
 ) -> None:
     """Run a simulation locally.
 
     Requires that 'sim prepare <simulation>' has been run first.
+    Use --clean to delete the runtime/ folder, re-prepare, and then run.
     """
     sim_path = _validate_sim(simulation)
+
+    root = _project_root()
+
+    if clean:
+        _clean_runtime(simulation, sim_path)
+        typer.echo(f"▶  Preparing: {simulation}")
+        _run(
+            [sys.executable, "-m", f"simulations.{simulation}.prepare"],
+            cwd=root,
+        )
+        typer.echo(f"✓  Done — runtime/ folder ready at simulations/{simulation}/runtime/")
+
     run_script = sim_path / "runtime" / "run.py"
     if not run_script.exists():
         typer.echo(
@@ -130,7 +157,6 @@ def run(
         raise typer.Exit(1)
 
     typer.echo(f"▶  Running: {simulation}")
-    root = _project_root()
     _run(
         [sys.executable, "-m", f"simulations.{simulation}.runtime.run"],
         cwd=root,
@@ -157,6 +183,18 @@ def submit(
     typer.echo(f"▶  Submitting to SLURM: {simulation}")
     root = _project_root()
     _run(["sbatch", str(job_script)], cwd=root)
+
+
+@app.command()
+def clean(
+    simulation: SimName,
+) -> None:
+    """Delete the runtime/ folder for a simulation.
+
+    Has no effect if the runtime/ folder does not exist.
+    """
+    sim_path = _validate_sim(simulation)
+    _clean_runtime(simulation, sim_path)
 
 
 @app.command(name="list")
