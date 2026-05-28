@@ -45,14 +45,14 @@ def build_sim(sim: Sim):
 
 
 # Job settings for Delft Blue
-partition = "gpu-a100-small"
-runtime = "3:30:00"
-cpu_per_task = "2"
+# partition = "gpu-a100-small"
+# runtime = "3:30:00"
+# cpu_per_task = "2"
 
 # or
-# partition = "gpu-a100"
-# runtime = "24:30:00"
-# cpu_per_task = "18"
+partition = "gpu-a100"
+runtime = "24:30:00"
+cpu_per_task = "18"
 
 sim_name = Path(__file__).parent.name
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
           wfreq = N_save,
           steps = N_frames*N_save,
           runtime = 0,
-          platform = 'OpenCL',
+          platform = 'CUDA',
           restart = 'checkpoint',
           frestart = 'restart.chk',
           verbose = True
