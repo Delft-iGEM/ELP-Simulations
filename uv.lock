@@ -235,8 +235,13 @@ source = { editable = "." }
 dependencies = [
     { name = "calvados" },
     { name = "ipykernel" },
+    { name = "matplotlib" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "openmm" },
     { name = "openmm-cuda-12", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pulp" },
+    { name = "seqfold" },
     { name = "typer" },
 ]
 
@@ -244,8 +249,12 @@ dependencies = [
 requires-dist = [
     { name = "calvados", git = "https://github.com/KULL-Centre/CALVADOS.git" },
     { name = "ipykernel", specifier = ">=7.2.0" },
+    { name = "matplotlib", specifier = ">=3.8.0" },
+    { name = "networkx", specifier = ">=3.4.2" },
     { name = "openmm", specifier = "==8.2.0" },
     { name = "openmm-cuda-12", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==8.2.0" },
+    { name = "pulp", specifier = ">=3.3.2" },
+    { name = "seqfold", specifier = ">=0.9.0" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
@@ -1113,6 +1122,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pulp"
+version = "3.3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/70/69be07a67621ad804d6cf347965eb4e0d7786a97330d99c31d735aaa6c5a/pulp-3.3.2.tar.gz", hash = "sha256:d0904700c207ac11e25e3b1213b70eae1d6fb25faa719d75f3f15054901258c0", size = 16305346, upload-time = "2026-05-25T09:41:26.207Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/6e/d674f1dde91c71e2ac19e5e5cf1ee6d5845e3aefecd9c39ed9c4b0c9a696/pulp-3.3.2-py3-none-any.whl", hash = "sha256:631b166f72086971a9597f7a0233ababa99bb8d50a01cd543f7758be5a9f86c0", size = 16391742, upload-time = "2026-05-25T09:41:22.2Z" },
+]
+
+[[package]]
 name = "pure-eval"
 version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1293,6 +1311,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/fb/e5955e2ddbdf2baee461eb53ec8d0adedd20a6dfc5510ef8d5e7e44ba461/scipy-1.13.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9ff7dad5d24a8045d836671e082a490848e8639cabb3dbdacb29f943a678683d", size = 38562576, upload-time = "2024-04-02T21:42:22.983Z" },
     { url = "https://files.pythonhosted.org/packages/6a/31/0777a66bb99f639fa0f0d1eeedcdc55df39e79f5357ad35917889c55f416/scipy-1.13.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:4dca18c3ffee287ddd3bc8f1dabaf45f5305c5afc9f8ab9cbfab855e70b2df5c", size = 38829830, upload-time = "2024-04-02T21:42:29.441Z" },
     { url = "https://files.pythonhosted.org/packages/d4/a1/d4adf25b6d2bef8d0ad1682829dcfcba97f3f96bb5b6f137bc3e41003cc7/scipy-1.13.0-cp311-cp311-win_amd64.whl", hash = "sha256:a2f471de4d01200718b2b8927f7d76b5d9bde18047ea0fa8bd15c5ba3f26a1d6", size = 46194840, upload-time = "2024-04-02T21:42:36.946Z" },
+]
+
+[[package]]
+name = "seqfold"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/f5/21bded88ddb57d44d7bd61b1ac6310c3180f343624318c4ae0e8efac4782/seqfold-0.9.0.tar.gz", hash = "sha256:81d44a673c2dd18754276aaabaae8cfcad0c5eb3f33879cd134343369ffdcdb5", size = 30799, upload-time = "2025-08-12T16:31:35.49Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/88/6f9118d8252473d9160efbb801814cba0ca2b50f39d6e777737c5d57fe2c/seqfold-0.9.0-py3-none-any.whl", hash = "sha256:df84a688ef73ee1ecee6a54c34cd61ec7eacc24e02760269eca5132893a40f22", size = 30218, upload-time = "2025-08-12T16:31:33.097Z" },
 ]
 
 [[package]]
