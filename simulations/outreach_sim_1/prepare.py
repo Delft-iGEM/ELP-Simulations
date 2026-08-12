@@ -27,15 +27,35 @@ sim_name = Path(__file__).parent.name
 
 L = 50
 N_save = 7000
-N_frames = 1010
+N_frames = 300
 
+'''
 sequences: dict[str, str] = {
      "VPGIG70": build_sequence_with_features([
-          ("I70", "I")
+          ("K70", "K")
      ])["seq"]
 }
 
-sequences["VPGIG70"] = f"Z{sequences['VPGIG70'][1:]}"
+
+sequences: dict[str, str] = {
+     "VPGIG70": build_sequence_with_features([
+          ("K18", "K"),
+          ("I34", "I"),
+          ("K18", "K")
+     ])["seq"]
+}
+'''
+sequences: dict[str, str] = {
+     "VPGIG70RGD": build_sequence_with_features([
+          ("I18", "I"),
+          ("K17", "K"),
+          ("I17", "I"),
+          ("K18", "K"),
+          ("RGD","RGD")
+     ])["seq"]
+}
+
+sequences["VPGIG70RGD"] = f"Z{sequences['VPGIG70RGD'][1:]}"
 
 if __name__ == "__main__":
      path = Path(__file__).parent.resolve()
@@ -51,11 +71,11 @@ if __name__ == "__main__":
           sysname = sim_name,
           box = [L, L, L],
           temp = 293.15,
-          ionic = 0.19,
+          ionic = 0.13,
           pH = 7.5,
-          ext_force = True,
+          ext_force = False,
           ext_force_expr = f'step({z_wall}-z)*0.5*({z_wall}-z)^2',
-          topol = 'random',
+          topol = 'center',   
           wfreq = N_save,
           steps = N_frames*N_save,
           runtime = 0,
@@ -68,7 +88,7 @@ if __name__ == "__main__":
      components = Components(
           # Defaults
           molecule_type = 'protein',
-          nmol = 10, # number of molecules
+          nmol = 1, # number of molecules
           restraint = False,
           charge_termini = 'both',
           fresidues = str(cwd / "residues_CALVADOS2.csv"),
