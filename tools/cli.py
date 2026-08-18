@@ -2,11 +2,13 @@
 sim — ELP Simulations CLI
 
 Commands:
+  sim new                    Scaffold a new surface-attached simulation and prepare it
   sim prepare <simulation>   Generate the runtime/ folder (config, FASTA, job.sh, run.py)
   sim run     <simulation>   Run the simulation locally
   sim submit  <simulation>   Submit via sbatch on DelftBlue
   sim clean   <simulation>   Delete the runtime/ folder for a simulation
   sim list                   List all available simulations
+  sim distribution           Plot a residue's z-axis distribution across all frames
 
 Flags:
   sim run --clean <simulation>   Delete runtime/, prepare, then run
@@ -25,6 +27,9 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+
+from tools.new_simulation import new as _new_simulation
+from tools.z_distribution import distribution as _distribution
 
 app = typer.Typer(
     name="sim",
@@ -104,6 +109,10 @@ SimName = Annotated[
         autocompletion=_sim_completer,
     ),
 ]
+
+
+app.command(name="new")(_new_simulation)
+app.command(name="distribution")(_distribution)
 
 
 @app.command()
