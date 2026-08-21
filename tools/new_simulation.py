@@ -23,7 +23,7 @@ import math
 import subprocess
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 import typer
 
@@ -32,6 +32,12 @@ app = typer.Typer(add_completion=False, no_args_is_help=False)
 # Fixed physical constants shared with the existing surface-attached templates.
 Z_HEIGHT = 50.0  # nm, box height
 Z_WALL = 1.9  # nm, depth of the surface-attachment potential well
+
+# OpenMM requires the nonbonded cutoff to be less than half the box size.
+# CALVADOS's default electrostatics cutoff (cutoff_yu) is 4.0 nm, so the box
+# footprint must be kept above this floor even if the requested
+# concentration/nmol would otherwise call for a tighter box.
+MIN_BOX_L = 10.0  # nm
 
 
 def _project_root() -> Path:
@@ -70,6 +76,70 @@ def _validate_sequence(value: str) -> str:
             f"Sequence contains unknown amino-acid letters: {', '.join(invalid)}"
         )
     return seq
+
+
+class BoxPlan(NamedTuple):
+    l_box: float
+    clamped: bool
+    spacing: float
+    min_sane_spacing: float
+    spacing_too_tight: bool
+
+
+def plan_box(n_residues: int, concentration: float, nmol: int) -> BoxPlan:
+    """Surface footprint + starting-grid spacing for `nmol` chains at `concentration`.
+
+    Shared by `sim new` and the analyze.ipynb planning cell so both agree on
+    the same box math.
+    """
+    # Surface footprint sized so nmol molecules sit at the requested
+    # concentration (chains / nm^2): L^2 = nmol / concentration.
+    l_box_raw = math.sqrt(nmol / concentration)
+    clamped = l_box_raw < MIN_BOX_L
+    l_box = round(max(l_box_raw, MIN_BOX_L), 2)
+
+    # Average spacing between molecules, recomputed from the final (possibly
+    # clamped) box so the initial grid always fits inside it.
+    spacing = round(l_box / math.sqrt(nmol), 3)
+
+    # Rough lower bound on a chain's own footprint (random-walk end-to-end
+    # estimate at the ~0.38 nm CALVADOS bond length). If molecules start
+    # packed tighter than this, they'll begin heavily overlapped and the
+    # simulation is very likely to diverge to NaN once dynamics starts.
+    min_sane_spacing = 0.38 * math.sqrt(n_residues)
+    spacing_too_tight = spacing < min_sane_spacing
+
+    return BoxPlan(l_box, clamped, spacing, min_sane_spacing, spacing_too_tight)
+
+
+def plan_steps(steps: int, max_n_save: int = 7000) -> tuple[int, int, int]:
+    """Save frequency/frame count that yields ~1000 saved frames, capped at max_n_save.
+
+    Returns (n_save, n_frames, actual_steps) — actual_steps is steps rounded
+    to an exact multiple of n_save.
+    """
+    n_save = min(max_n_save, max(1, steps // 1000))
+    n_frames = max(1, round(steps / n_save))
+    actual_steps = n_save * n_frames
+    return n_save, n_frames, actual_steps
+
+
+def get_clockwise_position(i: int) -> tuple[int, int, int]:
+    """Grid offset (in grid units, not nm) of molecule `i` on the starting grid.
+
+    Same spiral layout the generated prepare.py's build_sim() uses to place
+    molecules, exposed here so previews (e.g. the analyze.ipynb planning
+    cell) can reproduce the exact starting layout without duplicating it.
+    """
+    x, y = 0, 0
+    dx, dy = 0, -1
+
+    for _ in range(i):
+        if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y):
+            dx, dy = -dy, dx
+        x, y = x + dx, y + dy
+
+    return (x, y, 0)
 
 
 PREPARE_TEMPLATE = '''import os
@@ -114,9 +184,9 @@ def build_sim(sim: Sim):
 
 
 # Job settings for Delft Blue
-partition = "gpu-a100"
-runtime = "24:30:00"
-cpu_per_task = "18"
+partition = "__PARTITION__"
+runtime = "__WALLTIME__"
+cpu_per_task = "__CPU_PER_TASK__"
 
 sim_name = Path(__file__).parent.name
 
@@ -156,7 +226,7 @@ if __name__ == "__main__":
           wfreq = N_save,
           steps = N_frames*N_save,
           runtime = 0,
-          platform = 'CUDA',
+          platform = '__PLATFORM__',
           restart = 'checkpoint',
           frestart = 'restart.chk',
           verbose = True
@@ -208,6 +278,10 @@ def create_simulation(
     nmol: int,
     steps: int,
     name: str,
+    platform: str = "CUDA",
+    partition: str = "gpu-a100",
+    walltime: str = "24:30:00",
+    cpu_per_task: str = "18",
 ) -> Path:
     """Scaffold simulations/<name>/prepare.py and run it. Returns the sim folder."""
 
@@ -217,6 +291,8 @@ def create_simulation(
         raise typer.BadParameter("Number of ELPs must be at least 1.")
     if steps < 1:
         raise typer.BadParameter("Number of steps must be at least 1.")
+    if platform not in {"CUDA", "CPU"}:
+        raise typer.BadParameter("Platform must be 'CUDA' or 'CPU'.")
 
     seq = _validate_sequence(sequence)
     slug = _slugify(name)
@@ -228,35 +304,10 @@ def create_simulation(
             f"simulations/{slug}/ already exists — choose a different name."
         )
 
-    # Surface footprint sized so nmol molecules sit at the requested
-    # concentration (chains / nm^2): L^2 = nmol / concentration.
-    l_box = math.sqrt(nmol / concentration)
+    box_plan = plan_box(len(seq), concentration, nmol)
+    l_box, clamped, spacing, min_sane_spacing, spacing_too_tight = box_plan
 
-    # OpenMM requires the nonbonded cutoff to be less than half the box size.
-    # CALVADOS's default electrostatics cutoff (cutoff_yu) is 4.0 nm, so the
-    # box footprint must be kept above this floor even if the requested
-    # concentration/nmol would otherwise call for a tighter box.
-    min_l = 10.0
-    clamped = l_box < min_l
-    l_box = round(max(l_box, min_l), 2)
-
-    # Average spacing between molecules, recomputed from the final (possibly
-    # clamped) box so the initial grid always fits inside it.
-    spacing = round(l_box / math.sqrt(nmol), 3)
-
-    # Rough lower bound on a chain's own footprint (random-walk end-to-end
-    # estimate at the ~0.38 nm CALVADOS bond length). If molecules start
-    # packed tighter than this, they'll begin heavily overlapped and the
-    # simulation is very likely to diverge to NaN once dynamics starts.
-    min_sane_spacing = 0.38 * math.sqrt(len(seq))
-    spacing_too_tight = spacing < min_sane_spacing
-
-    # Pick a save frequency that yields ~1000 saved frames, capped at the
-    # 7000 used by the existing templates, and derive the actual step count
-    # (kept as an exact multiple of N_save, same convention as prepare.py).
-    n_save = min(7000, max(1, steps // 1000))
-    n_frames = max(1, round(steps / n_save))
-    actual_steps = n_save * n_frames
+    n_save, n_frames, actual_steps = plan_steps(steps)
 
     content = (
         PREPARE_TEMPLATE
@@ -269,6 +320,10 @@ def create_simulation(
         .replace("__SEQ_NAME__", slug)
         .replace("__SEQUENCE__", seq)
         .replace("__NMOL__", str(nmol))
+        .replace("__PLATFORM__", platform)
+        .replace("__PARTITION__", partition)
+        .replace("__WALLTIME__", walltime)
+        .replace("__CPU_PER_TASK__", cpu_per_task)
     )
 
     sim_dir.mkdir(parents=True)
@@ -280,7 +335,7 @@ def create_simulation(
         achieved = round(nmol / (l_box * l_box), 5)
         typer.echo(
             f"   note:       requested concentration needed a {round(math.sqrt(nmol / concentration), 2)} nm box, "
-            f"below the {min_l} nm floor required by CALVADOS's default cutoffs — "
+            f"below the {MIN_BOX_L} nm floor required by CALVADOS's default cutoffs — "
             f"clamped to {l_box} nm (achieved concentration: {achieved} chains/nm^2)"
         )
     typer.echo(f"   spacing:    {spacing} nm between starting positions")
@@ -292,6 +347,7 @@ def create_simulation(
             f"Consider a lower concentration and/or fewer molecules."
         )
     typer.echo(f"   molecules:  {nmol}")
+    typer.echo(f"   platform:   {platform}")
     if actual_steps != steps:
         typer.echo(f"   steps:      {actual_steps} (rounded from {steps} to a multiple of the {n_save}-step save frequency)")
     else:
