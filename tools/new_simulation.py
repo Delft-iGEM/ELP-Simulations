@@ -282,6 +282,7 @@ def create_simulation(
     partition: str = "gpu-a100",
     walltime: str = "24:30:00",
     cpu_per_task: str = "18",
+    max_n_save: int = 7000,
 ) -> Path:
     """Scaffold simulations/<name>/prepare.py and run it. Returns the sim folder."""
 
@@ -307,7 +308,7 @@ def create_simulation(
     box_plan = plan_box(len(seq), concentration, nmol)
     l_box, clamped, spacing, min_sane_spacing, spacing_too_tight = box_plan
 
-    n_save, n_frames, actual_steps = plan_steps(steps)
+    n_save, n_frames, actual_steps = plan_steps(steps, max_n_save=max_n_save)
 
     content = (
         PREPARE_TEMPLATE
