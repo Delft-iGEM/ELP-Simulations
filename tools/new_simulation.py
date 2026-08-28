@@ -40,6 +40,8 @@ Z_WALL = 1.9  # nm, depth of the surface-attachment potential well
 MIN_BOX_L = 10.0  # nm
 
 
+
+
 def _project_root() -> Path:
     here = Path(__file__).resolve().parent
     for candidate in [here, *here.parents]:
@@ -79,28 +81,101 @@ def _validate_sequence(value: str) -> str:
 
 
 class BoxPlan(NamedTuple):
-    l_box: float
-    clamped: bool
+    l_box_x: float
+    l_box_y: float
+    nx: int
+    ny: int
     spacing: float
+    clamped: bool
+    achieved_concentration: float
     min_sane_spacing: float
     spacing_too_tight: bool
+    aspect_ratio: float
+
+
+def plan_lattice(nmol: int) -> tuple[int, int]:
+    """Most-square rectangular grid (nx, ny) with nx * ny == nmol exactly.
+
+    An exactly-filled rectangle is what lets the periodic images tile the
+    surface seamlessly: every chain then sees the same neighbours at the same
+    spacing, including the ones sitting at the box edge, so no chain is less
+    crowded than any other. The old square spiral did not tile — for nmol=12 it
+    fills a 4x3 block of cells while the box was only sqrt(12)=3.46 cells wide,
+    so each chain at the edge sat ~0.5 spacings too close to its own periodic
+    image.
+    """
+    divisor = max(k for k in range(1, math.isqrt(nmol) + 1) if nmol % k == 0)
+    return nmol // divisor, divisor
+
+
+def suggest_nmol(nmol: int, max_aspect: float = 2.0, search: int = 24) -> int | None:
+    """Nearest molecule count whose most-square lattice is no worse than `max_aspect`.
+
+    Prime-ish counts (13, 37, ...) can only be laid out as a long strip, which
+    makes for a very elongated box; this points at a nearby count that doesn't.
+    """
+    for delta in range(1, search + 1):
+        for candidate in (nmol - delta, nmol + delta):
+            if candidate < 1:
+                continue
+            nx, ny = plan_lattice(candidate)
+            if max(nx, ny) / min(nx, ny) <= max_aspect:
+                return candidate
+    return None
+
+
+def smallest_untilted_nmol(concentration: float, nmol: int, search: int = 400) -> int | None:
+    """Smallest count >= nmol whose lattice clears MIN_BOX_L at the full concentration.
+
+    Below that the short side of the box would fall under the cutoff floor and
+    plan_box has to spread the chains out, quietly lowering the density; going
+    up to this many molecules keeps the density exactly as requested instead.
+    """
+    spacing = 1.0 / math.sqrt(concentration)
+    for candidate in range(nmol, nmol + search + 1):
+        nx, ny = plan_lattice(candidate)
+        if min(nx, ny) * spacing >= MIN_BOX_L and max(nx, ny) / min(nx, ny) <= 2.0:
+            return candidate
+    return None
 
 
 def plan_box(n_residues: int, concentration: float, nmol: int) -> BoxPlan:
-    """Surface footprint + starting-grid spacing for `nmol` chains at `concentration`.
+    """Periodic box + grafting lattice for `nmol` chains at `concentration`.
 
     Shared by `sim new` and the analyze.ipynb planning cell so both agree on
     the same box math.
-    """
-    # Surface footprint sized so nmol molecules sit at the requested
-    # concentration (chains / nm^2): L^2 = nmol / concentration.
-    l_box_raw = math.sqrt(nmol / concentration)
-    clamped = l_box_raw < MIN_BOX_L
-    l_box = round(max(l_box_raw, MIN_BOX_L), 2)
 
-    # Average spacing between molecules, recomputed from the final (possibly
-    # clamped) box so the initial grid always fits inside it.
-    spacing = round(l_box / math.sqrt(nmol), 3)
+    The chains are laid out on an exactly-filled nx-by-ny lattice and the box
+    is exactly nx*spacing by ny*spacing, so the periodic images continue the
+    lattice without a seam: the simulation represents an infinite grafted
+    surface, and a chain at the edge is as crowded as one in the middle. That
+    is also why there is no empty margin around the grid — a margin would make
+    this a finite patch whose rim chains are under-crowded.
+
+    Molecules do still cross the periodic boundary and get wrapped in the
+    trajectory, which looks like them teleporting across the box; that is a
+    representation artefact of correct periodic dynamics, and the analyze
+    notebook unwraps it rather than the box trying to avoid it.
+    """
+    nx, ny = plan_lattice(nmol)
+    aspect_ratio = max(nx, ny) / min(nx, ny)
+
+    # The lattice spacing *is* the surface concentration: one chain per
+    # spacing^2 of surface, so spacing = 1/sqrt(concentration).
+    spacing_raw = 1.0 / math.sqrt(concentration)
+
+    # OpenMM needs the nonbonded cutoff below half the box, so the *short* side
+    # of the box has to clear MIN_BOX_L. The only way to widen the box without
+    # breaking the tiling (nmol is fixed) is to spread the chains further
+    # apart, which lowers the concentration — reported loudly by the caller.
+    scale = max(1.0, MIN_BOX_L / (min(nx, ny) * spacing_raw))
+    clamped = scale > 1.0
+    spacing = round(spacing_raw * scale, 3)
+
+    # Exact multiples of the spacing: this is what makes the tiling seamless.
+    l_box_x = round(nx * spacing, 6)
+    l_box_y = round(ny * spacing, 6)
+    achieved_concentration = nmol / (l_box_x * l_box_y)
 
     # Rough lower bound on a chain's own footprint (random-walk end-to-end
     # estimate at the ~0.38 nm CALVADOS bond length). If molecules start
@@ -109,7 +184,18 @@ def plan_box(n_residues: int, concentration: float, nmol: int) -> BoxPlan:
     min_sane_spacing = 0.38 * math.sqrt(n_residues)
     spacing_too_tight = spacing < min_sane_spacing
 
-    return BoxPlan(l_box, clamped, spacing, min_sane_spacing, spacing_too_tight)
+    return BoxPlan(
+        l_box_x,
+        l_box_y,
+        nx,
+        ny,
+        spacing,
+        clamped,
+        achieved_concentration,
+        min_sane_spacing,
+        spacing_too_tight,
+        aspect_ratio,
+    )
 
 
 def plan_steps(steps: int, max_n_save: int = 7000) -> tuple[int, int, int]:
@@ -124,22 +210,16 @@ def plan_steps(steps: int, max_n_save: int = 7000) -> tuple[int, int, int]:
     return n_save, n_frames, actual_steps
 
 
-def get_clockwise_position(i: int) -> tuple[int, int, int]:
-    """Grid offset (in grid units, not nm) of molecule `i` on the starting grid.
+def lattice_positions(nmol: int, spacing: float) -> list[tuple[float, float]]:
+    """Grafting-point (x, y) of every molecule, in nm, on the tiling lattice.
 
-    Same spiral layout the generated prepare.py's build_sim() uses to place
-    molecules, exposed here so previews (e.g. the analyze.ipynb planning
-    cell) can reproduce the exact starting layout without duplicating it.
+    Row-major over the nx-by-ny lattice from plan_lattice, each molecule at the
+    *centre* of its spacing-by-spacing cell. The generated prepare.py's
+    build_sim() computes exactly the same positions, so previews (e.g. the
+    analyze.ipynb planning cell) can reproduce the real starting layout.
     """
-    x, y = 0, 0
-    dx, dy = 0, -1
-
-    for _ in range(i):
-        if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y):
-            dx, dy = -dy, dx
-        x, y = x + dx, y + dy
-
-    return (x, y, 0)
+    nx, _ny = plan_lattice(nmol)
+    return [((i % nx + 0.5) * spacing, (i // nx + 0.5) * spacing) for i in range(nmol)]
 
 
 PREPARE_TEMPLATE = '''import os
@@ -150,33 +230,42 @@ from pathlib import Path
 import numpy as np
 import mdtraj as md
 
-# Parameters
-def get_clockwise_position(i):
-     x, y = 0, 0
-     dx, dy = 0, -1  # Starting direction logic
-
-     for _ in range(i):
-          if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y):
-               # Rotate direction 90 degrees clockwise: (dx, dy) -> (-dy, dx)
-               dx, dy = -dy, dx
-          x, y = x + dx, y + dy
-
-     return np.array((x, y, 0))
-
 def build_sim(sim: Sim):
      components = sim.components
+
+     # Chains sit on an exactly-filled __NX__ x __NY__ lattice, one per
+     # spacing x spacing cell, and the box is exactly that lattice wide. The
+     # periodic images therefore continue the lattice without a seam, so this
+     # is an infinite grafted surface and every chain is equally crowded.
+     # Placing each chain at the *centre* of its cell (the +0.5) keeps it as far
+     # from the box edge as the lattice allows.
+     nx, ny = __NX__, __NY__
+     spacing = __SPACING__
 
      ibead = 0
      i = 0
      for comp in components:
+          # CALVADOS builds each chain's starting conformation with a lateral
+          # offset and extent of its own, so xinit's x/y centre is not (0, 0).
+          # Recentre it on the lattice point, otherwise the whole grafting
+          # pattern sits offset from the lattice the box is built around.
+          xy_centre = 0.5 * (comp.xinit[:, :2].min(axis=0) + comp.xinit[:, :2].max(axis=0))
+          xinit_centred = comp.xinit - np.array([xy_centre[0], xy_centre[1], 0.0])
+
           for idx in range(comp.nmol):
                j = ibead + comp.nbeads
 
-               x_c = (sim.box * 0.5)
-               x_c[2] = 2
+               x0 = (i % nx + 0.5) * spacing
+               y0 = (i // nx + 0.5) * spacing
 
-               pos = comp.xinit + x_c + get_clockwise_position(i) * __SPACING__
+               # Bead 0 is the "Z"-tagged bead. CALVADOS gives "Z" a molecular
+               # weight of -2 which the +2 N-terminus patch cancels to exactly
+               # 0, and OpenMM holds zero-mass particles completely fixed — so
+               # this lattice point is where the chain stays grafted for the
+               # whole run, in x, y and z.
+               pos = xinit_centred + np.array([x0, y0, 2.0])
                sim.pos[ibead:j] = pos
+
                ibead = j
                i += 1
 
@@ -190,7 +279,7 @@ cpu_per_task = "__CPU_PER_TASK__"
 
 sim_name = Path(__file__).parent.name
 
-box = [__L__, __L__, __Z_HEIGHT__]
+box = [__L_X__, __L_Y__, __Z_HEIGHT__]
 N_save = __N_SAVE__
 N_frames = __N_FRAMES__
 
@@ -306,14 +395,18 @@ def create_simulation(
         )
 
     box_plan = plan_box(len(seq), concentration, nmol)
-    l_box, clamped, spacing, min_sane_spacing, spacing_too_tight = box_plan
+    spacing = box_plan.spacing
+    min_sane_spacing = box_plan.min_sane_spacing
 
     n_save, n_frames, actual_steps = plan_steps(steps, max_n_save=max_n_save)
 
     content = (
         PREPARE_TEMPLATE
         .replace("__SPACING__", str(spacing))
-        .replace("__L__", str(l_box))
+        .replace("__NX__", str(box_plan.nx))
+        .replace("__NY__", str(box_plan.ny))
+        .replace("__L_X__", str(box_plan.l_box_x))
+        .replace("__L_Y__", str(box_plan.l_box_y))
         .replace("__Z_HEIGHT__", str(Z_HEIGHT))
         .replace("__N_SAVE__", str(n_save))
         .replace("__N_FRAMES__", str(n_frames))
@@ -331,16 +424,32 @@ def create_simulation(
     (sim_dir / "prepare.py").write_text(content)
 
     typer.echo(f"✓  Created simulations/{slug}/prepare.py")
-    typer.echo(f"   box:        [{l_box}, {l_box}, {Z_HEIGHT}] nm")
-    if clamped:
-        achieved = round(nmol / (l_box * l_box), 5)
+    typer.echo(f"   box:        [{box_plan.l_box_x}, {box_plan.l_box_y}, {Z_HEIGHT}] nm")
+    typer.echo(f"   lattice:    {box_plan.nx} x {box_plan.ny} grafting points, {spacing} nm apart, "
+               f"tiling the box exactly (infinite surface via the periodic images)")
+    typer.echo(f"   density:    {round(box_plan.achieved_concentration, 5)} chains/nm^2")
+    if box_plan.clamped:
         typer.echo(
-            f"   note:       requested concentration needed a {round(math.sqrt(nmol / concentration), 2)} nm box, "
-            f"below the {MIN_BOX_L} nm floor required by CALVADOS's default cutoffs — "
-            f"clamped to {l_box} nm (achieved concentration: {achieved} chains/nm^2)"
+            f"⚠  the requested {concentration} chains/nm^2 would make the short side of the box "
+            f"{round(min(box_plan.nx, box_plan.ny) / math.sqrt(concentration), 2)} nm, below the "
+            f"{MIN_BOX_L} nm floor required by CALVADOS's default cutoffs — the chains were spread "
+            f"out to {spacing} nm instead ({round(box_plan.achieved_concentration, 5)} chains/nm^2)."
         )
-    typer.echo(f"   spacing:    {spacing} nm between starting positions")
-    if spacing_too_tight:
+        bigger = smallest_untilted_nmol(concentration, nmol)
+        if bigger is not None:
+            bx, by = plan_lattice(bigger)
+            typer.echo(
+                f"   fix:        use nmol={bigger} ({bx} x {by}) to get the full "
+                f"{concentration} chains/nm^2 with no clamping."
+            )
+    if box_plan.aspect_ratio > 2.0:
+        better = suggest_nmol(nmol)
+        hint = f" — {better} molecules would tile {'x'.join(map(str, plan_lattice(better)))}" if better else ""
+        typer.echo(
+            f"⚠  {nmol} molecules only tile as {box_plan.nx} x {box_plan.ny}, giving a very "
+            f"elongated box{hint}."
+        )
+    if box_plan.spacing_too_tight:
         typer.echo(
             f"⚠  spacing ({spacing} nm) is tight for a {len(seq)}-residue chain "
             f"(rough own-size estimate: {min_sane_spacing:.2f} nm) — molecules will start "

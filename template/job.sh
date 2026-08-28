@@ -12,8 +12,8 @@
 
 set -euo pipefail
 
-module load 2024r1
-module load cuda
+module load 2026
+module load cuda/12.9
 
 export PATH="$HOME/.local/bin:$PATH"
 
