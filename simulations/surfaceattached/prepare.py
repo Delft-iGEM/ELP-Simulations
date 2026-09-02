@@ -41,8 +41,7 @@ if __name__ == "__main__":
      path = Path(__file__).parent.resolve()
      cwd = Path(os.getcwd())
 
-     runtime_dir = path / "runtime"
-     runtime_dir.mkdir(exist_ok=True)
+     runtime_dir = ensure_runtime_dir(path)
 
      fasta_file = runtime_dir / "molecules.fasta"
 

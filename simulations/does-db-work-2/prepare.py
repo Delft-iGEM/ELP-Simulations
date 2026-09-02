@@ -7,33 +7,42 @@ import numpy as np
 import mdtraj as md
 from tools.paths import ensure_runtime_dir
 
-# Parameters
-def get_clockwise_position(i):
-     x, y = 0, 0
-     dx, dy = 0, -1  # Starting direction logic
-
-     for _ in range(i):
-          if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y):
-               # Rotate direction 90 degrees clockwise: (dx, dy) -> (-dy, dx)
-               dx, dy = -dy, dx
-          x, y = x + dx, y + dy
-
-     return np.array((x, y, 0))
-
 def build_sim(sim: Sim):
      components = sim.components
+
+     # Chains sit on an exactly-filled 4 x 3 lattice, one per
+     # spacing x spacing cell, and the box is exactly that lattice wide. The
+     # periodic images therefore continue the lattice without a seam, so this
+     # is an infinite grafted surface and every chain is equally crowded.
+     # Placing each chain at the *centre* of its cell (the +0.5) keeps it as far
+     # from the box edge as the lattice allows.
+     nx, ny = 4, 3
+     spacing = 3.333
 
      ibead = 0
      i = 0
      for comp in components:
+          # CALVADOS builds each chain's starting conformation with a lateral
+          # offset and extent of its own, so xinit's x/y centre is not (0, 0).
+          # Recentre it on the lattice point, otherwise the whole grafting
+          # pattern sits offset from the lattice the box is built around.
+          xy_centre = 0.5 * (comp.xinit[:, :2].min(axis=0) + comp.xinit[:, :2].max(axis=0))
+          xinit_centred = comp.xinit - np.array([xy_centre[0], xy_centre[1], 0.0])
+
           for idx in range(comp.nmol):
                j = ibead + comp.nbeads
 
-               x_c = (sim.box * 0.5)
-               x_c[2] = 2
+               x0 = (i % nx + 0.5) * spacing
+               y0 = (i // nx + 0.5) * spacing
 
-               pos = comp.xinit + x_c + get_clockwise_position(i) * 4.083
+               # Bead 0 is the "Z"-tagged bead. CALVADOS gives "Z" a molecular
+               # weight of -2 which the +2 N-terminus patch cancels to exactly
+               # 0, and OpenMM holds zero-mass particles completely fixed — so
+               # this lattice point is where the chain stays grafted for the
+               # whole run, in x, y and z.
+               pos = xinit_centred + np.array([x0, y0, 2.0])
                sim.pos[ibead:j] = pos
+
                ibead = j
                i += 1
 
@@ -42,23 +51,23 @@ def build_sim(sim: Sim):
 
 # Job settings for Delft Blue
 partition = "gpu-a100"
-runtime = "24:30:00"
+runtime = "0:30:00"
 cpu_per_task = "18"
 
 sim_name = Path(__file__).parent.name
 
-box = [25.82, 25.82, 50.0]
-N_save = 20
-N_frames = 1000
+box = [13.332, 9.999, 50.0]
+N_save = 7000
+N_frames = 1010
 
 # OpenMM runs in nm. The wall keeps the "Z"-tagged end of each ELP anchored
 # near the surface at z ~= 0.
 z_wall = 1.9
 
 sequences: dict[str, str] = {
-     "my-elp-sim-k-cpu": "VPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGKGVPGIGVPGIGVPGIGVPGIGVPGIGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGKGVPGIGVPGIGVPGIGVPGIGVPGIG"
+     "does-db-work-2": "VPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGKGVPGIGVPGIGVPGIGVPGIGVPGIGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGVGVPGKGVPGIGVPGIGVPGIGVPGIGVPGIG"
 }
-sequences["my-elp-sim-k-cpu"] = f"Z{sequences['my-elp-sim-k-cpu'][1:]}"
+sequences["does-db-work-2"] = f"Z{sequences['does-db-work-2'][1:]}"
 
 
 if __name__ == "__main__":
@@ -82,7 +91,7 @@ if __name__ == "__main__":
           wfreq = N_save,
           steps = N_frames*N_save,
           runtime = 0,
-          platform = 'CPU',
+          platform = 'CUDA',
           restart = 'checkpoint',
           frestart = 'restart.chk',
           verbose = True
@@ -91,7 +100,7 @@ if __name__ == "__main__":
      components = Components(
           # Defaults
           molecule_type = 'protein',
-          nmol = 40, # number of molecules
+          nmol = 12, # number of molecules
           restraint = False,
           charge_termini = 'both',
           fresidues = str(cwd / "residues_CALVADOS2.csv"),

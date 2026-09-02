@@ -49,6 +49,32 @@ cd ELP-Simulations
 uv sync --frozen
 ```
 
+### Where simulation data goes
+
+Trajectories are big — a few hundred MB per simulation — and DelftBlue caps
+`/home` at 30 GB while `/scratch` gives you 5 TB. So on DelftBlue the
+`runtime/` folder is a **symlink**: the data itself is written to
+
+```
+/scratch/$USER/elp-data/oefeningen/<sim_name>/
+```
+
+`sim prepare` and `sim new` create the link for you, and everything else —
+`run.py`, `job.sh`, `analyze.ipynb` — keeps using the familiar
+`simulations/<sim_name>/runtime/` path, so nothing changes in day-to-day use.
+`sim clean` deletes the data on `/scratch` along with the link.
+
+Set `ELP_DATA_DIR` to put the data somewhere else. On a machine with no
+`/scratch/$USER` (your laptop), `runtime/` stays a plain folder inside the repo
+and nothing is symlinked.
+
+Simulations created before this was set up keep their data in the repo until
+you move it:
+
+```bash
+sim migrate <simulation>   # or --all
+```
+
 ## Writing simulations
 
 The simulations use [CALVADOS](https://github.com/KULL-Centre/CALVADOS) on
@@ -96,6 +122,8 @@ sim list                          # list available simulations
 sim prepare i70-surfaceattached   # generate runtime/ folder
 sim run     i70-surfaceattached   # run locally
 sim submit  i70-surfaceattached   # sbatch on DelftBlue
+sim clean   i70-surfaceattached   # delete its runtime data
+sim migrate i70-surfaceattached   # move existing runtime data onto /scratch
 ```
 
 ### Shell autocomplete

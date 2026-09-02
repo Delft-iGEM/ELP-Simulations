@@ -6,6 +6,7 @@ from calvados.components import Protein
 from pathlib import Path
 import numpy as np
 import mdtraj as md
+from tools.paths import ensure_runtime_dir
 
 from tools.elibpy import build_sequence_with_features
 
@@ -73,8 +74,7 @@ if __name__ == "__main__":
      path = Path(__file__).parent.resolve()
      cwd = Path(os.getcwd())
 
-     runtime_dir = path / "runtime"
-     runtime_dir.mkdir(exist_ok=True)
+     runtime_dir = ensure_runtime_dir(path)
 
      fasta_file = runtime_dir / "molecules.fasta"
 
