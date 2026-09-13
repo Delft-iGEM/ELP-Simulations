@@ -150,6 +150,14 @@ runs = {p.parent.parent.name: pd.read_csv(p, index_col="key")["value"]
 pd.DataFrame(runs).T
 ```
 
+### Is it equilibrated?
+
+The first cell of the Analyze section in `analyze.ipynb` plots the radius of
+gyration of the grafted chains per frame and cumulatively, works out how much
+burn-in to discard and how many independent samples the rest is worth, and from
+that estimates how many steps the next run of a comparable sequence actually
+needs — which is usually fewer than a round number picked up front.
+
 ### Shell autocomplete
 
 Install completion once (detects your shell automatically — bash, zsh, fish, or PowerShell):
