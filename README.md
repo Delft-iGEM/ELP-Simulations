@@ -172,10 +172,12 @@ pd.DataFrame(runs).T
 ### Is it equilibrated?
 
 The first cell of the Analyze section in `analyze.ipynb` plots the radius of
-gyration of the grafted chains per frame and cumulatively, works out how much
-burn-in to discard and how many independent samples the rest is worth, and from
-that estimates how many steps the next run of a comparable sequence actually
-needs — which is usually fewer than a round number picked up front.
+gyration and the RMSD of the grafted chains, each per frame and cumulatively,
+works out how much burn-in to discard and how many independent samples the rest
+is worth, and from that estimates how many steps the next run of a comparable
+sequence actually needs. Both observables are there because they fail
+differently: a chain reaches its final size long before it has forgotten the
+conformation it started in.
 
 ### Shell autocomplete
 
