@@ -124,6 +124,30 @@ sim run     i70-surfaceattached   # run locally
 sim submit  i70-surfaceattached   # sbatch on DelftBlue
 sim clean   i70-surfaceattached   # delete its runtime data
 sim migrate i70-surfaceattached   # move existing runtime data onto /scratch
+sim metadata i70-surfaceattached  # write runtime/metadata.csv (--all for every simulation)
+```
+
+### Run metadata
+
+Every prepared run gets a `runtime/metadata.csv` next to its `.dcd` — the
+settings that define it (sequence, chain length, nmol, spacing and the fraction
+of the chain length it corresponds to, surface concentration, box, total steps,
+steps per frame, simulated time, temperature, ionic strength, pH, wall depth,
+cutoffs, force field, platform, package versions) plus how far the run actually
+got. `prepare.py` writes it, `run.py` refreshes it when the run finishes, and
+`sim metadata <sim>` (or `--all`) regenerates it — including for simulations
+that predate the file, since everything is recovered from `config.yaml`,
+`components.yaml`, `molecules.fasta` and the DCD header.
+
+One row per setting (`key,value,unit,description`), so a batch of runs is one
+concat away from a comparison table:
+
+```python
+import pandas as pd
+from pathlib import Path
+runs = {p.parent.parent.name: pd.read_csv(p, index_col="key")["value"]
+        for p in Path("simulations").glob("*/runtime/metadata.csv")}
+pd.DataFrame(runs).T
 ```
 
 ### Shell autocomplete

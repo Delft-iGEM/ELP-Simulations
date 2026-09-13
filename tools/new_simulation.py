@@ -309,6 +309,7 @@ from pathlib import Path
 import numpy as np
 import mdtraj as md
 from tools.paths import ensure_runtime_dir
+from tools.metadata import write_metadata
 
 def build_sim(sim: Sim):
      components = sim.components
@@ -438,6 +439,10 @@ if __name__ == "__main__":
           .replace("{cpu_per_task}", cpu_per_task)
 
      (runtime_dir / "job.sh").write_text(job_file)
+
+     # Settings snapshot next to the trajectory-to-be. run.py rewrites it when
+     # the run finishes (status/frame count); `sim metadata` refreshes it any time.
+     write_metadata(runtime_dir)
 '''
 
 

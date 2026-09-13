@@ -1,6 +1,7 @@
 from calvados.sim import Sim
 from yaml import safe_load
 from ..prepare import build_sim # type: ignore
+from tools.metadata import write_metadata
 from pathlib import Path
 import openmm
 
@@ -23,3 +24,7 @@ sim.build_system()
 build_sim(sim)
 
 sim.simulate()
+
+# The run is over, so metadata.csv can now record what actually came out of it
+# (status, frames written) on top of the settings prepare.py already stored.
+write_metadata(runtime_dir)

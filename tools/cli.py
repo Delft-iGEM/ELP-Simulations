@@ -10,6 +10,8 @@ Commands:
   sim list                   List all available simulations
   sim migrate <simulation>   Move an in-repo runtime/ folder onto the data root
                              (--all for every simulation)
+  sim metadata <simulation>  Write runtime/metadata.csv (settings snapshot next to
+                             the .dcd; --all for every simulation)
   sim distribution           Plot a residue's z-axis distribution across all frames
 
 Flags:
@@ -293,6 +295,62 @@ def migrate(
     typer.echo(f"▶  Data root: {root}")
     moved = sum(_migrate_runtime(name, path) for name, path in targets)
     typer.echo(f"✓  Migrated {moved} simulation(s)")
+
+
+@app.command()
+def metadata(
+    simulation: Annotated[
+        str | None,
+        typer.Argument(help="Simulation to (re)write metadata for.", autocompletion=_sim_completer),
+    ] = None,
+    all_sims: Annotated[bool, typer.Option("--all", help="Every prepared simulation.")] = False,
+    show: Annotated[bool, typer.Option("--show", help="Print the metadata as well as writing it.")] = False,
+) -> None:
+    """(Re)write runtime/metadata.csv — the run's settings, beside its .dcd.
+
+    New runs get this automatically (prepare writes it, run.py refreshes it when
+    the run finishes). Use this to back-fill simulations that predate it, or to
+    refresh the status/frame count of a run that has moved on since.
+    """
+    from tools.metadata import METADATA_FILENAME, read_metadata, write_metadata
+
+    if all_sims:
+        targets = [(name, _simulations_dir() / name) for name in _available_simulations()]
+    elif simulation is not None:
+        targets = [(simulation, _validate_sim(simulation))]
+    else:
+        typer.echo("Error: give a simulation name, or --all.", err=True)
+        raise typer.Exit(1)
+
+    written = 0
+    for name, sim_path in targets:
+        runtime_dir = sim_path / "runtime"
+        if not (runtime_dir / "config.yaml").is_file():
+            if not all_sims:
+                typer.echo(
+                    f"Error: {name} has no runtime/config.yaml — run 'sim prepare {name}' first.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+            typer.echo(f"–  {name}: not prepared, skipped")
+            continue
+
+        write_metadata(runtime_dir)
+        meta = read_metadata(runtime_dir)
+        written += 1
+        typer.echo(
+            f"✓  {name}: {METADATA_FILENAME} written "
+            f"({meta.get('status', '?')}, {meta.get('n_frames_saved') or 0}/"
+            f"{meta.get('n_frames_planned', '?')} frames, "
+            f"{meta.get('n_residues', '?')} residues x {meta.get('nmol', '?')} chains, "
+            f"spacing {meta.get('spacing_nm', '?')} nm)"
+        )
+        if show:
+            for key, value in meta.items():
+                typer.echo(f"     {key:<30} {value}")
+
+    if all_sims:
+        typer.echo(f"✓  {written} simulation(s) documented")
 
 
 @app.command(name="list")
