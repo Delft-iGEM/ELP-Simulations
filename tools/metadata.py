@@ -44,7 +44,14 @@ from typing import Any, NamedTuple
 
 from yaml import safe_load
 
-from tools.new_simulation import BOND_L, Z_HEIGHT, chain_length_nm, plan_lattice
+from tools.new_simulation import (
+    BOND_L,
+    Z_HEIGHT,
+    chain_length_nm,
+    chain_molar_mass,
+    mass_per_area,
+    plan_lattice,
+)
 
 METADATA_FILENAME = "metadata.csv"
 
@@ -180,6 +187,12 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
     contour = chain_length_nm(n_residues, "contour") if n_residues else 0.0
     coil = chain_length_nm(n_residues, "coil") if n_residues else 0.0
 
+    # Weigh the chain with the residue table the run itself used (components.yaml
+    # records its path), falling back to the project's copy if that has moved.
+    fresidues = Path(str(defaults.get("fresidues", "")))
+    chain_mass = chain_molar_mass(seq, fresidues if fresidues.is_file() else None) if seq else 0.0
+    mass_concentration = mass_per_area(chain_mass, spacing)
+
     steps = int(config.get("steps", 0) or 0)
     wfreq = int(config.get("wfreq", 0) or 0)
     n_frames_planned = steps // wfreq if wfreq else 0
@@ -208,6 +221,10 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
               f"Fully-extended chain length, (N-1) x {BOND_L} nm"),
         Field("chain_coil_size_nm", _round(coil, 3), "nm",
               f"Random-walk end-to-end estimate, {BOND_L} x sqrt(N)"),
+        Field("chain_molar_mass_da", _round(chain_mass, 2), "Da",
+              "Molar mass of one chain (residues + one water). The anchor bead is "
+              "counted as the valine it is a tagged copy of, not as its MW = -2 "
+              "simulation placeholder"),
 
         # ---- how they were grafted ----
         Field("spacing_nm", spacing, "nm", "Distance between neighbouring grafting points"),
@@ -217,6 +234,11 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
               "spacing_nm as a fraction of chain_coil_size_nm"),
         Field("concentration_chains_per_nm2", _round(concentration, 6), "chains/nm^2",
               "Surface concentration actually achieved, nmol / (box_x * box_y)"),
+        Field("mass_concentration_ug_cm2", _round(mass_concentration, 6), "ug/cm^2",
+              "Grafted polymer mass per area (the --mass-concentration knob) — one "
+              "chain of chain_molar_mass_da per spacing^2"),
+        Field("mass_concentration_mg_m2", _round(mass_concentration * 10, 6), "mg/m^2",
+              "The same quantity in the other common unit (1 ug/cm^2 = 10 mg/m^2)"),
         Field("lattice_matches_box", lattice_matches_box, "",
               "True = box is an exact nx x ny multiple of the spacing (seamless tiling), so "
               "spacing_nm is exact; False = spacing_nm is inferred and approximate"),

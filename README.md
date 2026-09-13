@@ -127,6 +127,25 @@ sim migrate i70-surfaceattached   # move existing runtime data onto /scratch
 sim metadata i70-surfaceattached  # write runtime/metadata.csv (--all for every simulation)
 ```
 
+### Spacing the chains
+
+`sim new` (and the notebook's planning cell) sets the distance between grafting
+points in exactly one of three ways:
+
+```bash
+sim new ... --concentration 0.02       # chains/nm^2 — same chain count per area
+sim new ... --spacing-fraction 0.5     # fraction of the chain's own length
+sim new ... --mass-concentration 0.2   # ug/cm^2 — same mass of polymer per area
+```
+
+The last one is the one to use when comparing ELPs of different lengths against
+an experiment that measures adsorbed mass: a chain twice as long weighs twice as
+much, so it gets grafted sqrt(2) further apart and the surface still carries the
+same µg/cm². Chain molar mass is summed from the residue table (the anchor bead
+counts as the valine it is a tagged copy of, not as its MW = -2 simulation
+placeholder). Whichever mode is used, all three numbers — chains/nm², fraction
+of the chain length, and µg/cm² — are reported and recorded.
+
 ### Run metadata
 
 Every prepared run gets a `runtime/metadata.csv` next to its `.dcd` — the

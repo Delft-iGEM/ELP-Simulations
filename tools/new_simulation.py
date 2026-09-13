@@ -1,10 +1,10 @@
 """
 sim new — scaffold a new surface-attached ELP simulation.
 
-Prompts for an ELP sequence, how far apart to graft the chains (either an
-absolute surface concentration or a spacing given as a fraction of the ELP's
-own length), how many copies to simulate, and how many steps to run, then
-creates
+Prompts for an ELP sequence, how far apart to graft the chains (an absolute
+surface concentration, a spacing given as a fraction of the ELP's own length,
+or a grafted mass per area), how many copies to simulate, and how many steps to
+run, then creates
 simulations/<name>/prepare.py (in the same style as
 simulations/surfaceattached-multiple) and immediately runs it to produce a
 ready runtime/ folder.
@@ -20,6 +20,10 @@ Or non-interactively:
     # spacing that scales with the ELP: half its fully-extended length, so a
     # 300 nm ELP is grafted 150 nm apart and a 600 nm one 300 nm apart
     uv run sim new --sequence VPGIGVPGIGVPGIG... --spacing-fraction 0.5 \\
+        --nmol 500 --steps 7070000 --name my-elp-surface
+
+    # same amount of polymer per area whatever the chain length
+    uv run sim new --sequence VPGIGVPGIGVPGIG... --mass-concentration 0.2 \\
         --nmol 500 --steps 7070000 --name my-elp-surface
 """
 
@@ -51,6 +55,11 @@ MIN_BOX_L = 10.0  # nm
 BOND_L = 0.38  # nm
 
 LENGTH_MEASURES = ("contour", "coil")
+
+# For the mass-per-area spacing mode: one water is released per peptide bond, so
+# a chain weighs the sum of its residue masses plus one water.
+WATER_DA = 18.015
+AVOGADRO = 6.02214076e23
 
 
 
@@ -93,6 +102,53 @@ def _validate_sequence(value: str) -> str:
     return seq
 
 
+def residue_masses(csv_path: Path | str | None = None) -> dict[str, float]:
+    """one-letter code -> residue molar mass in Da, with the anchor tag resolved.
+
+    "Z" is CALVADOS's surface-anchor tag and the table gives it MW -2, so that
+    the +2 N-terminus patch cancels it to exactly zero and OpenMM pins the bead.
+    That is a simulation trick, not chemistry: the row's three-letter code says
+    which amino acid the bead really is (VAL), and that is what the polymer
+    actually weighs, so "Z" is counted as that residue here.
+    """
+    path = Path(csv_path) if csv_path else _project_root() / "residues_CALVADOS2.csv"
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    by_three = {row["three"]: float(row["MW"]) for row in rows if float(row["MW"]) > 0}
+    masses = {}
+    for row in rows:
+        mw = float(row["MW"])
+        masses[row["one"]] = mw if mw > 0 else by_three.get(row["three"], 0.0)
+    return masses
+
+
+def chain_molar_mass(sequence: str, csv_path: Path | str | None = None) -> float:
+    """Molar mass of one chain in Da (g/mol) — its residues plus one water."""
+    if not sequence:
+        return 0.0
+    masses = residue_masses(csv_path)
+    return sum(masses.get(letter, 0.0) for letter in sequence) + WATER_DA
+
+
+def mass_per_area(chain_mass_da: float, spacing_nm: float) -> float:
+    """Grafted mass per unit area in ug/cm^2 — one chain per spacing^2 of surface.
+
+    This is the quantity a QCM-D or ellipsometry measurement reports, and the
+    one to hold fixed when comparing ELPs of different lengths: the same
+    ug/cm^2 means the same amount of polymer on the surface, whether that is
+    many short chains or few long ones.
+    """
+    if spacing_nm <= 0 or chain_mass_da <= 0:
+        return 0.0
+    # g per chain / nm^2 -> ug/cm^2: x 1e14 nm^2/cm^2 x 1e6 ug/g.
+    return chain_mass_da * 1e20 / (AVOGADRO * spacing_nm ** 2)
+
+
+def spacing_for_mass_per_area(chain_mass_da: float, ug_per_cm2: float) -> float:
+    """Inverse of mass_per_area: the spacing that puts `ug_per_cm2` on the surface."""
+    return math.sqrt(chain_mass_da * 1e20 / (AVOGADRO * ug_per_cm2))
+
+
 def chain_length_nm(n_residues: int, measure: str = "contour") -> float:
     """The chain's own length scale in nm — what `spacing_fraction` is a fraction of.
 
@@ -132,6 +188,11 @@ class BoxPlan(NamedTuple):
     chain_length: float
     achieved_spacing_fraction: float
     length_measure: str
+    # Molar mass of one chain and the grafted mass per area it works out to.
+    # Like the fraction above, reported in every mode, so a run planned by
+    # concentration still says how much polymer per cm^2 that puts down.
+    chain_mass_da: float
+    achieved_mass_concentration: float
 
 
 def plan_lattice(nmol: int) -> tuple[int, int]:
@@ -181,23 +242,32 @@ def smallest_untilted_nmol(target_spacing: float, nmol: int, search: int = 400) 
 
 
 def plan_box(
-    n_residues: int,
+    sequence: str | int,
     concentration: float | None,
     nmol: int,
     spacing_fraction: float | None = None,
     length_measure: str = "contour",
+    mass_concentration: float | None = None,
 ) -> BoxPlan:
     """Periodic box + grafting lattice for `nmol` chains.
 
-    How far apart the chains are grafted is set in one of two mutually
+    `sequence` is the ELP sequence, or just its residue count when the molar
+    mass is not needed (everything except the mass mode works from the count
+    alone).
+
+    How far apart the chains are grafted is set in one of three mutually
     exclusive ways — pass exactly one:
 
     * `concentration` (chains/nm^2): an absolute spacing, 1/sqrt(concentration).
-      The same number of nm for every run, whatever the ELP.
+      The same number of chains per area for every run, whatever the ELP.
     * `spacing_fraction`: the spacing as a fraction of the chain's *own* length
       (`chain_length_nm(n_residues, length_measure)`), so it scales with the
       ELP. At spacing_fraction=0.5 a 300 nm ELP gets 150 nm between anchors and
       a 600 nm one gets 300 nm.
+    * `mass_concentration` (ug/cm^2): the same *mass* of polymer per unit area
+      for every run. A chain twice as long weighs twice as much, so it is
+      grafted sqrt(2) times further apart — which is what to hold fixed when
+      comparing against an experiment that measures adsorbed mass.
 
     Shared by `sim new` and the analyze.ipynb planning cell so both agree on
     the same box math.
@@ -214,11 +284,15 @@ def plan_box(
     representation artefact of correct periodic dynamics, and the analyze
     notebook unwraps it rather than the box trying to avoid it.
     """
-    if (concentration is None) == (spacing_fraction is None):
+    given = [concentration, spacing_fraction, mass_concentration]
+    if sum(value is not None for value in given) != 1:
         raise typer.BadParameter(
-            "Give exactly one of concentration (chains/nm^2) or spacing_fraction "
-            "(spacing as a fraction of the chain's own length)."
+            "Give exactly one of concentration (chains/nm^2), spacing_fraction "
+            "(fraction of the chain's own length) or mass_concentration (ug/cm^2)."
         )
+
+    n_residues = len(sequence) if isinstance(sequence, str) else int(sequence)
+    chain_mass = chain_molar_mass(sequence) if isinstance(sequence, str) else 0.0
 
     nx, ny = plan_lattice(nmol)
     aspect_ratio = max(nx, ny) / min(nx, ny)
@@ -232,6 +306,17 @@ def plan_box(
         if spacing_fraction <= 0:
             raise typer.BadParameter("spacing_fraction must be greater than 0.")
         spacing_raw = spacing_fraction * chain_length
+    elif mass_concentration is not None:
+        # Same mass of polymer per unit area whatever the chain length: one
+        # chain of chain_mass per spacing^2 of surface.
+        if mass_concentration <= 0:
+            raise typer.BadParameter("mass_concentration must be greater than 0.")
+        if chain_mass <= 0:
+            raise typer.BadParameter(
+                "mass_concentration needs the sequence itself (its molar mass), "
+                "not just a residue count."
+            )
+        spacing_raw = spacing_for_mass_per_area(chain_mass, mass_concentration)
     else:
         # The lattice spacing *is* the surface concentration: one chain per
         # spacing^2 of surface, so spacing = 1/sqrt(concentration).
@@ -274,6 +359,8 @@ def plan_box(
         chain_length,
         spacing / chain_length,
         length_measure,
+        chain_mass,
+        mass_per_area(chain_mass, spacing),
     )
 
 
@@ -459,12 +546,13 @@ def create_simulation(
     max_n_save: int = 7000,
     spacing_fraction: float | None = None,
     length_measure: str = "contour",
+    mass_concentration: float | None = None,
 ) -> Path:
     """Scaffold simulations/<name>/prepare.py and run it. Returns the sim folder.
 
-    Pass exactly one of `concentration` (absolute spacing, chains/nm^2) or
-    `spacing_fraction` (spacing as a fraction of this ELP's own length) — see
-    plan_box.
+    Pass exactly one of `concentration` (chains/nm^2), `spacing_fraction`
+    (fraction of this ELP's own length) or `mass_concentration` (ug/cm^2, the
+    same grafted mass per area whatever the chain length) — see plan_box.
     """
 
     if nmol < 1:
@@ -484,18 +572,21 @@ def create_simulation(
             f"simulations/{slug}/ already exists — choose a different name."
         )
 
-    box_plan = plan_box(len(seq), concentration, nmol, spacing_fraction, length_measure)
+    box_plan = plan_box(seq, concentration, nmol, spacing_fraction, length_measure,
+                        mass_concentration)
     spacing = box_plan.spacing
     min_sane_spacing = box_plan.min_sane_spacing
 
     n_save, n_frames, actual_steps = plan_steps(steps, max_n_save=max_n_save)
 
-    spacing_note = (
-        f"spacing = {spacing_fraction} x the chain's own {length_measure} length "
-        f"({box_plan.chain_length:.2f} nm for these {len(seq)} residues)"
-        if spacing_fraction is not None
-        else f"spacing = 1/sqrt({concentration} chains/nm^2)"
-    )
+    if spacing_fraction is not None:
+        spacing_note = (f"spacing = {spacing_fraction} x the chain's own {length_measure} length "
+                        f"({box_plan.chain_length:.2f} nm for these {len(seq)} residues)")
+    elif mass_concentration is not None:
+        spacing_note = (f"spacing = one {box_plan.chain_mass_da / 1000:.2f} kDa chain per "
+                        f"spacing^2, i.e. {mass_concentration} ug/cm^2 of grafted polymer")
+    else:
+        spacing_note = f"spacing = 1/sqrt({concentration} chains/nm^2)"
     if box_plan.clamped:
         spacing_note += f", widened to {spacing} nm to clear the {MIN_BOX_L} nm box floor"
 
@@ -531,23 +622,27 @@ def create_simulation(
                f"({length_measure} length) — spacing is "
                f"{box_plan.achieved_spacing_fraction:.3f} x that")
     typer.echo(f"   density:    {round(box_plan.achieved_concentration, 5)} chains/nm^2")
+    typer.echo(f"   mass:       {box_plan.chain_mass_da / 1000:.2f} kDa per chain, "
+               f"{box_plan.achieved_mass_concentration:.4f} ug/cm^2 grafted "
+               f"({box_plan.achieved_mass_concentration * 10:.3f} mg/m^2)")
     if box_plan.clamped:
-        requested_spacing = (
-            spacing_fraction * box_plan.chain_length
-            if spacing_fraction is not None
-            else 1.0 / math.sqrt(concentration)
-        )
-        asked_for = (
-            f"a spacing of {spacing_fraction} x the chain's {box_plan.chain_length:.2f} nm "
-            f"{length_measure} length ({requested_spacing:.2f} nm)"
-            if spacing_fraction is not None
-            else f"{concentration} chains/nm^2 ({requested_spacing:.2f} nm apart)"
-        )
+        if spacing_fraction is not None:
+            requested_spacing = spacing_fraction * box_plan.chain_length
+            asked_for = (f"a spacing of {spacing_fraction} x the chain's "
+                         f"{box_plan.chain_length:.2f} nm {length_measure} length "
+                         f"({requested_spacing:.2f} nm)")
+        elif mass_concentration is not None:
+            requested_spacing = spacing_for_mass_per_area(box_plan.chain_mass_da, mass_concentration)
+            asked_for = f"{mass_concentration} ug/cm^2 ({requested_spacing:.2f} nm apart)"
+        else:
+            requested_spacing = 1.0 / math.sqrt(concentration)
+            asked_for = f"{concentration} chains/nm^2 ({requested_spacing:.2f} nm apart)"
         typer.echo(
             f"⚠  the requested {asked_for} would make the short side of the box "
             f"{round(min(box_plan.nx, box_plan.ny) * requested_spacing, 2)} nm, below the "
             f"{MIN_BOX_L} nm floor required by CALVADOS's default cutoffs — the chains were spread "
             f"out to {spacing} nm instead ({round(box_plan.achieved_concentration, 5)} chains/nm^2, "
+            f"{box_plan.achieved_mass_concentration:.4f} ug/cm^2, "
             f"{box_plan.achieved_spacing_fraction:.3f} x the chain length)."
         )
         bigger = smallest_untilted_nmol(requested_spacing, nmol)
@@ -569,7 +664,8 @@ def create_simulation(
             f"⚠  spacing ({spacing} nm) is tight for a {len(seq)}-residue chain "
             f"(rough own-size estimate: {min_sane_spacing:.2f} nm) — molecules will start "
             f"heavily overlapped and the simulation is likely to diverge to NaN. "
-            f"Consider a lower concentration / larger spacing fraction and/or fewer molecules."
+            f"Consider a lower concentration / mass loading, a larger spacing fraction, "
+            f"and/or fewer molecules."
         )
     typer.echo(f"   molecules:  {nmol}")
     typer.echo(f"   platform:   {platform}")
@@ -620,6 +716,13 @@ def new(
                  "(0.5 => a 300 nm ELP is grafted 150 nm apart, a 600 nm one 300 nm apart).",
         ),
     ] = None,
+    mass_concentration: Annotated[
+        float | None,
+        typer.Option(
+            help="Grafted mass per area (ug/cm^2) — holds the amount of polymer on the "
+                 "surface fixed, so a chain twice as long is grafted sqrt(2) further apart.",
+        ),
+    ] = None,
     length_measure: Annotated[
         str,
         typer.Option(help="Which chain length spacing-fraction is a fraction of: "
@@ -628,33 +731,33 @@ def new(
 ) -> None:
     """Scaffold and prepare a new surface-attached ELP simulation.
 
-    Spacing is set either by --concentration or by --spacing-fraction (exactly
-    one). Neither given interactively? You're asked which one you want.
+    Spacing comes from exactly one of --concentration, --spacing-fraction or
+    --mass-concentration. Give none of them interactively and you're asked
+    which one you want.
     """
-    # Typer prompts at parse time, which can't ask for one option *or* the
-    # other, so the either/or is prompted for here instead.
-    if concentration is None and spacing_fraction is None:
-        by_fraction = typer.confirm(
-            "Set the spacing as a fraction of the ELP's own length? "
-            "(no = give an absolute surface concentration)",
-            default=False,
+    # Typer prompts at parse time, which can't ask for one option *or* another,
+    # so the choice between the three is prompted for here instead.
+    modes = [concentration, spacing_fraction, mass_concentration]
+    if sum(value is not None for value in modes) > 1:
+        raise typer.BadParameter(
+            "Give only one of --concentration, --spacing-fraction or --mass-concentration."
         )
-        if by_fraction:
+    if not any(value is not None for value in modes):
+        typer.echo("How should the chains be spaced?")
+        typer.echo("  1  surface concentration  (chains/nm^2 — same chain count per area)")
+        typer.echo("  2  fraction of the chain's own length  (scales with the ELP)")
+        typer.echo("  3  mass per area  (ug/cm^2 — same amount of polymer per area)")
+        choice = typer.prompt("Choose", type=int, default=1)
+        if choice == 2:
             length_measure = typer.prompt(
                 f"Which chain length to measure against ({'/'.join(LENGTH_MEASURES)})",
                 default=length_measure,
             )
-            spacing_fraction = typer.prompt(
-                "Spacing as a fraction of that length", type=float
-            )
+            spacing_fraction = typer.prompt("Spacing as a fraction of that length", type=float)
+        elif choice == 3:
+            mass_concentration = typer.prompt("Grafted mass per area (ug/cm^2)", type=float)
         else:
-            concentration = typer.prompt(
-                "Surface concentration (ELP chains / nm^2)", type=float
-            )
-    elif concentration is not None and spacing_fraction is not None:
-        raise typer.BadParameter(
-            "Give either --concentration or --spacing-fraction, not both."
-        )
+            concentration = typer.prompt("Surface concentration (ELP chains / nm^2)", type=float)
 
     create_simulation(
         sequence,
@@ -664,6 +767,7 @@ def new(
         name,
         spacing_fraction=spacing_fraction,
         length_measure=length_measure,
+        mass_concentration=mass_concentration,
     )
 
 
