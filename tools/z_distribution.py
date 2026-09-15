@@ -23,6 +23,8 @@ import MDAnalysis as mda
 import numpy as np
 import typer
 
+from tools.results import results_dir, sim_dir_for_runtime
+
 app = typer.Typer(add_completion=False)
 
 
@@ -115,8 +117,16 @@ def distribution(
     z, n_frames = collect_z_positions(pdb, dcd, residue)
     fig = plot_z_distribution(z, residue, n_frames, bins=bins)
 
-    out_path = output or dcd.with_name(f"{dcd.stem}_{residue.upper()}_z_distribution.png")
-    fig.savefig(out_path, dpi=150)
+    # Default into the simulation's tracked results/ folder so the plot is
+    # committed with the run. Falls back to sitting beside the DCD, as it always
+    # did, when the trajectory isn't one of this repo's simulations.
+    name = f"{dcd.stem}_{residue.upper()}_z_distribution.png"
+    if output is not None:
+        out_path = output
+    else:
+        sim_path = sim_dir_for_runtime(dcd.parent)
+        out_path = (results_dir(sim_path) / name) if sim_path else dcd.with_name(name)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     typer.echo(f"✓  Saved z-distribution plot to {out_path}")
 
     if show:

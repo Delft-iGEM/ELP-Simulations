@@ -57,6 +57,7 @@ from tools.new_simulation import (
     mass_per_area,
     plan_lattice,
 )
+from tools.results import publish
 
 METADATA_FILENAME = "metadata.csv"
 
@@ -377,7 +378,12 @@ def write_lattice(runtime_dir: Path, *, nx: int, ny: int, spacing: float, margin
 
 
 def write_metadata(runtime_dir: Path) -> Path:
-    """(Re)write runtime/metadata.csv. Returns the path written."""
+    """(Re)write runtime/metadata.csv, and copy it into results/. Returns the runtime path.
+
+    The copy is what makes a committed result interpretable: a plot in
+    ``results/`` is worth little without the spacing, box, temperature and
+    crosslinking settings that produced it sitting next to it.
+    """
     runtime_dir = Path(runtime_dir)
     path = runtime_dir / METADATA_FILENAME
     with open(path, "w", newline="") as f:
@@ -385,6 +391,7 @@ def write_metadata(runtime_dir: Path) -> Path:
         writer.writerow(["key", "value", "unit", "description"])
         for field in collect_metadata(runtime_dir):
             writer.writerow([field.key, field.value, field.unit, field.description])
+    publish(runtime_dir, METADATA_FILENAME)
     return path
 
 

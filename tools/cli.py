@@ -16,6 +16,10 @@ Commands:
   sim crosslink <simulation> Detect crosslinks post-hoc in a finished trajectory
                              (the comparison against a reactive run)
 
+Results (summaries, plots, metadata.csv) are filed in
+simulations/<simulation>/results/, which is version-controlled and survives
+`sim clean` — see tools/results.py.
+
 Flags:
   sim run --clean <simulation>   Delete runtime/, prepare, then run
 
@@ -258,7 +262,9 @@ def clean(
 ) -> None:
     """Delete the runtime/ folder for a simulation.
 
-    Has no effect if the runtime/ folder does not exist.
+    Has no effect if the runtime/ folder does not exist. The simulation's
+    results/ folder is left alone — that is the point of it being separate:
+    the summaries and plots outlive the trajectory they came from.
     """
     sim_path = _validate_sim(simulation)
     _clean_runtime(simulation, sim_path)
@@ -434,6 +440,14 @@ def crosslink(
     typer.echo(f"✓  {len(rows)} crosslinks ({intra} intra, {len(rows) - intra} inter), "
                f"conversion {2 * len(rows) / (len(xl.sites) * valence):.3f}")
     typer.echo(f"   {events.name} and {summary.name} written")
+
+    # Same two files into the tracked results/ folder, so the comparison against
+    # the reactive run is committed with the simulation rather than left on
+    # /scratch for `sim clean` to take.
+    from tools.results import publish
+
+    for path in publish(runtime_dir, events.name, summary.name):
+        typer.echo(f"   → {path.parent.name}/{path.name}")
 
 
 @app.command(name="list")

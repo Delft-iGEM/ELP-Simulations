@@ -68,6 +68,10 @@ Set `ELP_DATA_DIR` to put the data somewhere else. On a machine with no
 `/scratch/$USER` (your laptop), `runtime/` stays a plain folder inside the repo
 and nothing is symlinked.
 
+What a run *concludes* — summaries and plots — is kept separately in
+`simulations/<sim_name>/results/`, which is tracked; see [Analysis
+results](#analysis-results).
+
 Simulations created before this was set up keep their data in the repo until
 you move it:
 
@@ -277,9 +281,60 @@ concat away from a comparison table:
 import pandas as pd
 from pathlib import Path
 runs = {p.parent.parent.name: pd.read_csv(p, index_col="key")["value"]
-        for p in Path("simulations").glob("*/runtime/metadata.csv")}
+        for p in Path("simulations").glob("*/results/metadata.csv")}
 pd.DataFrame(runs).T
 ```
+
+### Analysis results
+
+`runtime/` is gitignored, sits on `/scratch`, and `sim clean` deletes it. So
+anything an analysis writes there dies with the run and never reaches GitHub —
+someone cloning this repo would get every simulation's recipe and none of its
+findings.
+
+Results therefore go in a `results/` folder *beside* `prepare.py`, which is
+tracked:
+
+```
+simulations/<sim_name>/
+    prepare.py      the recipe        (tracked)
+    results/        what came out     (tracked)
+    runtime/        the raw data      (gitignored symlink to /scratch)
+```
+
+Text results are written as `.txt`, tables as `.csv` and plots as `.png`, so
+GitHub renders all of them in the browser. It fills up by itself:
+
+| Written by | Lands in `results/` as |
+| --- | --- |
+| every `sim prepare` / finished run | `metadata.csv` |
+| a reactive run | `crosslink_summary.txt`, `crosslink_events.csv` |
+| `sim crosslink <sim>` | `crosslink_summary_posthoc.txt`, `crosslink_events_posthoc.csv` |
+| `sim distribution` | `<sim>_<residue>_z_distribution.png` |
+| `analyze.ipynb` | the plots and printed analyses of each section |
+
+`metadata.csv` is copied alongside deliberately: a plot is worth little without
+the spacing, box, temperature and crosslinking settings that produced it. It
+also means the comparison table above works straight from a fresh clone.
+
+In the notebook, two helpers defined in the Analyze entry cell do this — add one
+line to a cell and its output is committed with the simulation:
+
+```python
+save_fig("free_end_coordinates.png")   # the current figure
+
+capture_start()                        # ... cell prints as usual ...
+capture_save("crosslink_contacts.txt") # and is also written to results/
+```
+
+`capture_start()` only tees: output still appears under the cell as it always
+did. Both raise rather than guess if `sim_name` doesn't match a real simulation,
+so a stale name can't scatter a stray folder.
+
+What stays out: the trajectory, `top.pdb` and `crosslink_state.json` (restart
+state, not a result), and anything over 5 MB, which is refused with a warning —
+a large file committed by accident stays in the history even after it is
+deleted.
 
 ### Is it equilibrated?
 

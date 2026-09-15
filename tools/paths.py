@@ -32,6 +32,16 @@ from pathlib import Path
 DEFAULT_SCRATCH_SUBDIR = "elp-data/oefeningen"
 
 
+def project_root() -> Path:
+    """The repository root — the folder holding ``simulations/`` and ``tools/``.
+
+    Derived from this file's own location rather than the working directory, so
+    it is still right when a run is launched from ``/scratch`` (see
+    ``results.sim_dir_for_runtime``) or from inside a notebook.
+    """
+    return Path(__file__).resolve().parent.parent
+
+
 def data_root() -> Path | None:
     """Directory that holds every simulation's runtime data, or None if in-repo."""
     env = os.environ.get("ELP_DATA_DIR")

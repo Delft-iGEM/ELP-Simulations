@@ -73,6 +73,8 @@ from typing import Any, NamedTuple
 import numpy as np
 from yaml import safe_dump, safe_load
 
+from tools.results import publish
+
 # Written by prepare.py next to the trajectory; read by run.py.
 CROSSLINK_FILENAME = "crosslink.yaml"
 # Outputs, all in the same runtime/ folder as the .dcd.
@@ -653,9 +655,17 @@ class Crosslinker:
         return path
 
     def write_outputs(self, runtime_dir: Path, n_save: int, steps_done: int) -> None:
-        """Both output files. Called at every checkpoint, so a killed run keeps its log."""
+        """Both output files. Called at every checkpoint, so a killed run keeps its log.
+
+        The same two files are copied into the simulation's tracked ``results/``
+        folder, so the conversion and the intra/inter split survive `sim clean`
+        and reach GitHub with the run that produced them. The checkpoint
+        (``crosslink_state.json``) is deliberately not copied: it is restart
+        state, not a result.
+        """
         self.write_events(runtime_dir, n_save)
         self.write_summary(runtime_dir, n_save, steps_done)
+        publish(runtime_dir, SUMMARY_FILENAME, EVENTS_FILENAME)
 
 
 def _chunk_sizes(remaining: int, settings: CrosslinkSettings, ramping: bool) -> int:
