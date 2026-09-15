@@ -23,7 +23,21 @@ sim.build_system()
 
 build_sim(sim)
 
-sim.simulate()
+# Reactive crosslinking is opt-in. prepare.py writes runtime/crosslink.yaml only
+# when it was asked for (tools.crosslink.CROSSLINK_FILENAME — spelled out here so
+# a run with no crosslinking never even imports the module), and without that
+# file this is the stock CALVADOS path, byte for byte as it was before the
+# feature existed: no extra force, no random numbers drawn, same trajectory.
+if (runtime_dir / "crosslink.yaml").is_file():
+     from tools.crosslink import load_settings, run_reactive
+
+     crosslink = load_settings(runtime_dir)
+     if crosslink is None:
+          sim.simulate()
+     else:
+          run_reactive(sim, crosslink, runtime_dir)
+else:
+     sim.simulate()
 
 # The run is over, so metadata.csv can now record what actually came out of it
 # (status, frames written) on top of the settings prepare.py already stored.

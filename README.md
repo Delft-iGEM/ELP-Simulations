@@ -125,6 +125,7 @@ sim submit  i70-surfaceattached   # sbatch on DelftBlue
 sim clean   i70-surfaceattached   # delete its runtime data
 sim migrate i70-surfaceattached   # move existing runtime data onto /scratch
 sim metadata i70-surfaceattached  # write runtime/metadata.csv (--all for every simulation)
+sim crosslink i70-surfaceattached --distance 0.8  # post-hoc crosslink detection
 ```
 
 ### Spacing the chains
@@ -146,17 +147,128 @@ counts as the valine it is a tagged copy of, not as its MW = -2 simulation
 placeholder). Whichever mode is used, all three numbers — chains/nm², fraction
 of the chain length, and µg/cm² — are reported and recorded.
 
+### Space around the lattice
+
+By default the lattice fills the box exactly (`nx × spacing` by `ny × spacing`),
+so the periodic images continue it without a seam. A rim chain is half a spacing
+from the wall and half a spacing from the next box on the other side — exactly
+one spacing from its neighbour, as crowded as a chain in the middle. That is a
+uniform infinite grafted surface, and it is the right default.
+
+The price is that chains genuinely sit at the boundary, lean across it, and are
+written to the trajectory wrapped to the opposite side. The dynamics are correct
+(and the analysis unwraps them), but in a rendered trajectory it looks like the
+molecule teleporting. `--margin-fraction` leaves empty surface around the
+lattice so that happens less:
+
+```bash
+sim new ...                         # default: no rim, lattice tiles the box exactly
+sim new ... --margin-fraction 0.5   # half a spacing of rim on each side
+sim new ... --margin-fraction 1.5   # more room still, at the cost of a bigger box
+```
+
+The rim is `margin_fraction × spacing` wide on every side, so the box becomes
+`nx × spacing + 2 × margin`. At 0.5 an edge chain starts a full spacing from the
+wall instead of half of one, which stops most of the wrapping.
+
+The trade-off is exactly the uniformity above: with a rim, neighbours across the
+boundary are `spacing + 2 × margin` apart instead of `spacing`, so the rim chains
+really are less crowded than the ones in the middle and the run is a finite
+grafted patch repeated periodically. Worth it for per-chain observables (Rg,
+height, RMSD), where a dilute rim barely matters and a readable trajectory does;
+not worth it for anything that depends on uniform lateral crowding. `spacing`
+means the nearest-neighbour distance either way, so the three spacing knobs keep
+their meaning; what a margin dilutes is the *box-averaged* density, reported
+separately as `box_concentration_chains_per_nm2` and
+`box_mass_concentration_ug_cm2`.
+
+### Reactive crosslinking (opt-in)
+
+Off by default, and the default is not merely "the feature does nothing": with
+no `--crosslink-distance` the run never writes `runtime/crosslink.yaml`, `run.py`
+never imports the crosslinking module, no force is added and no random numbers
+are drawn. A non-reactive run is bit-for-bit the trajectory it was before this
+existed — verified by running the same seeded system through both the old and
+new pipelines and comparing coordinates.
+
+Turned on, lysine pairs that come within the reaction distance bond permanently
+*while the run is going*, so a formed crosslink tethers its chains and changes
+what happens next:
+
+```bash
+sim new ... --crosslink-distance 0.8 --crosslink-start-step 2000000
+sim new ... --crosslink-distance 0.8 --crosslink-valence 2   # trifunctional (THPP-like)
+sim new ... --crosslink-distance 0.8 --crosslink-prob 0.01   # reaction- not diffusion-limited
+```
+
+`--crosslink-distance` is in **nanometres**, like the rest of the box maths and
+OpenMM — not the ångströms an MDAnalysis-based post-hoc script works in. Every
+startup line prints both so the two cannot be confused.
+
+The knobs: `--crosslink-valence` (bonds per lysine; 1 = a bifunctional
+crosslinker at 1:1, 2 = trifunctional junctions), `--crosslink-prob` (P(react |
+within the cutoff at a check) — below 1 decouples the reaction rate from the
+diffusion rate, which is the Damköhler sweep), `--crosslink-check-every`,
+`--crosslink-k` / `--crosslink-r0` / `--crosslink-ramp-steps` (the bond itself,
+switched on gradually so it doesn't spike the temperature), and
+`--crosslink-start-step`, which you should always set — see below. The same
+names are inputs in the notebook's planning cell.
+
+Each reactive run writes, beside its trajectory: `crosslink_events.csv` (one row
+per bond, columns `frame,time_ps,resid_i,chain_i,resid_j,chain_j,kind,span,x,y,z,
+pymol_i,pymol_j` — `frame` is the saved-trajectory frame the event rounds to,
+`chain_*` are 0-based chain indices, `resid_*` are 1-based within their chain,
+`x,y,z` is the midpoint of the pair, and `pymol_*` are 1-based for PyMOL's
+`index` selector) and `crosslink_summary.txt` (conversion, the
+intra/inter split, loop spans, the settings used). The **intra fraction is the
+primary output** — it is the primary-loop estimate that feeds real elastic
+network theory. The network is checkpointed too (`crosslink_state.json`), so a
+restarted run resumes with the bonds it had already made instead of silently
+building a different network.
+
+`sim crosslink <sim> --distance 0.8` applies the same rule *post-hoc* to a
+finished trajectory, where a formed bond changes nothing. Run it on a
+non-reactive trajectory and compare: it should count **at least as many**
+crosslinks as the reactive run of the same system, and more wherever lysines
+have competing partners, because it counts encounters a real network would have
+prevented by tethering the chains at the first bond. The gap between the two is
+the interesting number, and a post-hoc conversion near 100% mostly says the
+cutoff was generous and nothing was ever restrained.
+
+**Read before believing any of it** (the full list is in `tools/crosslink.py`):
+
+- CALVADOS has no crosslinker, no solvent and no activation barrier. The
+  reaction is a pure distance criterion on coarse-grained beads. The *sequence
+  and topology* of events is meaningful; the *rate* is not — do not report event
+  times as kinetics.
+- CALVADOS2 has no temperature-dependent hydrophobicity, so it cannot reproduce
+  the LCST transition that drives coacervation in real ELP crosslinking. Use
+  HPS-T if the transition matters.
+- The reaction distance dominates every result. Sweep it (0.5, 0.8, 1.2 nm) and
+  report the sensitivity rather than one number.
+- Contacts in the first frames are artefacts of the initial placement, not
+  encounters the dynamics produced. Set `--crosslink-start-step` past
+  equilibration (the notebook's Rg/RMSD check says where that is) and state what
+  you used.
+- Valence changes the answer: Kawamoto et al. (Macromolecules 2015, 48, 8980)
+  found A2+B4 networks far more prone to cyclic defects than A2+B3.
+
 ### Run metadata
 
 Every prepared run gets a `runtime/metadata.csv` next to its `.dcd` — the
 settings that define it (sequence, chain length, nmol, spacing and the fraction
-of the chain length it corresponds to, surface concentration, box, total steps,
+of the chain length it corresponds to, the margin around the lattice, surface
+concentration, box, any crosslinking settings and how many bonds formed, total
+steps,
 steps per frame, simulated time, temperature, ionic strength, pH, wall depth,
 cutoffs, force field, platform, package versions) plus how far the run actually
 got. `prepare.py` writes it, `run.py` refreshes it when the run finishes, and
 `sim metadata <sim>` (or `--all`) regenerates it — including for simulations
 that predate the file, since everything is recovered from `config.yaml`,
-`components.yaml`, `molecules.fasta` and the DCD header.
+`components.yaml`, `molecules.fasta`, `lattice.yaml`, `crosslink.yaml` and the
+DCD header. (Only the lattice has to be stated rather than derived: once there is a margin around
+it, the box is one number holding two unknowns. Runs from before margins existed
+have no `lattice.yaml` and are read back as the seamless lattices they are.)
 
 One row per setting (`key,value,unit,description`), so a batch of runs is one
 concat away from a comparison table:

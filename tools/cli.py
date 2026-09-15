@@ -13,6 +13,8 @@ Commands:
   sim metadata <simulation>  Write runtime/metadata.csv (settings snapshot next to
                              the .dcd; --all for every simulation)
   sim distribution           Plot a residue's z-axis distribution across all frames
+  sim crosslink <simulation> Detect crosslinks post-hoc in a finished trajectory
+                             (the comparison against a reactive run)
 
 Flags:
   sim run --clean <simulation>   Delete runtime/, prepare, then run
@@ -351,6 +353,87 @@ def metadata(
 
     if all_sims:
         typer.echo(f"✓  {written} simulation(s) documented")
+
+
+@app.command()
+def crosslink(
+    simulation: SimName,
+    distance: Annotated[
+        float,
+        typer.Option(help="Reaction distance between two lysine beads, IN NANOMETRES."),
+    ],
+    valence: Annotated[int, typer.Option(help="Max bonds per lysine.")] = 1,
+    start_step: Annotated[
+        int,
+        typer.Option(help="Ignore contacts before this MD step (initial-placement artefacts)."),
+    ] = 0,
+    prob: Annotated[
+        float,
+        typer.Option(help="P(react | within the cutoff at a frame)."),
+    ] = 1.0,
+    seed: Annotated[int, typer.Option(help="Seed for the reaction RNG (only used if --prob < 1).")] = 0,
+) -> None:
+    """Detect crosslinks post-hoc in a finished trajectory — the first-passage rule.
+
+    Walks the saved frames and bonds any lysine pair that has come within
+    `--distance`, exactly as the reactive mode does, except that here the bond
+    changes nothing: the chains carry on as if unbonded.
+
+    This is the comparison a reactive run is for. A post-hoc pass over a
+    *non-reactive* trajectory should count more crosslinks than the reactive run
+    of the same system, because it counts encounters a real network would have
+    prevented by tethering the chains at the first bond. A post-hoc conversion
+    near 100% mostly says the cutoff was generous and nothing was ever restrained.
+
+    Writes crosslink_events_posthoc.csv / crosslink_summary_posthoc.txt beside the
+    trajectory, leaving any reactive run's own output untouched.
+    """
+    from tools.crosslink import CrosslinkSettings, post_hoc_events
+    from tools.metadata import as_float, read_metadata
+
+    sim_path = _validate_sim(simulation)
+    runtime_dir = sim_path / "runtime"
+    meta = read_metadata(runtime_dir)
+    sim_name = meta.get("sim_name") or simulation
+    traj = runtime_dir / f"{sim_name}.dcd"
+    top = runtime_dir / "top.pdb"
+    for path in (traj, top):
+        if not path.is_file():
+            typer.echo(f"Error: {path} not found — has {simulation} been run?", err=True)
+            raise typer.Exit(1)
+
+    n_save = int(as_float(meta, "steps_per_frame", 0) or 0)
+    if not n_save:
+        typer.echo("Error: steps_per_frame missing from metadata.csv — run "
+                   f"'sim metadata {simulation}' first.", err=True)
+        raise typer.Exit(1)
+
+    settings = CrosslinkSettings(distance=distance, valence=valence, prob=prob,
+                                 check_every=n_save, start_step=start_step, seed=seed)
+    typer.echo(f"▶  Post-hoc crosslink detection on {simulation}: {settings.banner()}")
+    xl = post_hoc_events(traj, top, settings, n_save=n_save, seed=seed)
+
+    events = runtime_dir / "crosslink_events_posthoc.csv"
+    summary = runtime_dir / "crosslink_summary_posthoc.txt"
+    rows = xl.event_rows(n_save)
+    import csv as _csv
+
+    from tools.crosslink import CSV_COLUMNS
+
+    with open(events, "w", newline="") as f:
+        writer = _csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    steps = int(as_float(meta, "total_steps", 0) or 0)
+    summary.write_text("\n".join(
+        ["POST-HOC detection on a finished trajectory — the bonds changed nothing.",
+         "Compare against a reactive run of the same system; see `sim crosslink --help`.",
+         ""] + xl.summary_lines(n_save, steps)) + "\n")
+
+    intra = sum(1 for r in rows if r["kind"] == "intra")
+    typer.echo(f"✓  {len(rows)} crosslinks ({intra} intra, {len(rows) - intra} inter), "
+               f"conversion {2 * len(rows) / (len(xl.sites) * valence):.3f}")
+    typer.echo(f"   {events.name} and {summary.name} written")
 
 
 @app.command(name="list")

@@ -25,6 +25,14 @@ Or non-interactively:
     # same amount of polymer per area whatever the chain length
     uv run sim new --sequence VPGIGVPGIGVPGIG... --mass-concentration 0.2 \\
         --nmol 500 --steps 7070000 --name my-elp-surface
+
+    # opt in to extra empty surface around the lattice, so chains stop wrapping
+    # across the periodic boundary (off by default — the lattice tiles exactly)
+    uv run sim new ... --margin-fraction 0.5     # half a spacing of rim per side
+
+    # opt in to reactive crosslinking: lysine pairs within 0.8 nm bond during the
+    # run (off by default; see tools/crosslink.py for the caveats)
+    uv run sim new ... --crosslink-distance 0.8 --crosslink-start-step 1000000
 """
 
 from __future__ import annotations
@@ -38,6 +46,8 @@ from typing import Annotated, NamedTuple
 
 import typer
 
+from tools.crosslink import CrosslinkSettings
+
 app = typer.Typer(add_completion=False, no_args_is_help=False)
 
 # Fixed physical constants shared with the existing surface-attached templates.
@@ -49,6 +59,16 @@ Z_WALL = 1.9  # nm, depth of the surface-attachment potential well
 # footprint must be kept above this floor even if the requested
 # concentration/nmol would otherwise call for a tighter box.
 MIN_BOX_L = 10.0  # nm
+
+# Empty rim left between the outermost grafting points and the box wall, as a
+# fraction of the lattice spacing (one margin on *each* side). Off by default:
+# with no rim the lattice tiles its own periodic images seamlessly, so every
+# chain — rim or middle — sits exactly one spacing from its neighbours and the
+# run is a uniform infinite grafted surface. Ask for a rim (0.5 = the edge
+# chains a full spacing from the wall) to keep chains away from the periodic
+# boundary so they stop wrapping to the far side of the trajectory, at the cost
+# of that uniformity. See plan_box for the trade-off.
+DEFAULT_MARGIN_FRACTION = 0.0
 
 # CALVADOS's CA-CA bond length. Sets both the fully-extended ("contour") length
 # of a chain and the random-walk ("coil") estimate of its footprint.
@@ -177,6 +197,10 @@ class BoxPlan(NamedTuple):
     ny: int
     spacing: float
     clamped: bool
+    # Grafting density of the lattice itself, 1/spacing^2 — the density the
+    # chains actually feel from their neighbours, and what the concentration /
+    # mass knobs are asked in. With a margin the box is bigger than the lattice,
+    # so the *box-averaged* density (box_concentration below) is lower.
     achieved_concentration: float
     min_sane_spacing: float
     spacing_too_tight: bool
@@ -193,6 +217,14 @@ class BoxPlan(NamedTuple):
     # concentration still says how much polymer per cm^2 that puts down.
     chain_mass_da: float
     achieved_mass_concentration: float
+    # Empty rim between the outermost grafting points and the box wall, on each
+    # side, and the fraction of the spacing it was asked for as.
+    margin: float
+    margin_fraction: float
+    # Densities averaged over the whole box, margin included — below the lattice
+    # values above whenever margin > 0.
+    box_concentration: float
+    box_mass_concentration: float
 
 
 def plan_lattice(nmol: int) -> tuple[int, int]:
@@ -226,17 +258,24 @@ def suggest_nmol(nmol: int, max_aspect: float = 2.0, search: int = 24) -> int | 
     return None
 
 
-def smallest_untilted_nmol(target_spacing: float, nmol: int, search: int = 400) -> int | None:
-    """Smallest count >= nmol whose lattice clears MIN_BOX_L at the requested spacing.
+def smallest_untilted_nmol(
+    target_spacing: float,
+    nmol: int,
+    search: int = 400,
+    margin_fraction: float = DEFAULT_MARGIN_FRACTION,
+) -> int | None:
+    """Smallest count >= nmol whose box clears MIN_BOX_L at the requested spacing.
 
     Below that the short side of the box would fall under the cutoff floor and
     plan_box has to spread the chains out, quietly changing the spacing (and so
     the density); going up to this many molecules keeps the spacing exactly as
-    asked for instead.
+    asked for instead. The margin counts towards the box size, same as in
+    plan_box.
     """
     for candidate in range(nmol, nmol + search + 1):
         nx, ny = plan_lattice(candidate)
-        if min(nx, ny) * target_spacing >= MIN_BOX_L and max(nx, ny) / min(nx, ny) <= 2.0:
+        short_side = (min(nx, ny) + 2 * margin_fraction) * target_spacing
+        if short_side >= MIN_BOX_L and max(nx, ny) / min(nx, ny) <= 2.0:
             return candidate
     return None
 
@@ -248,6 +287,7 @@ def plan_box(
     spacing_fraction: float | None = None,
     length_measure: str = "contour",
     mass_concentration: float | None = None,
+    margin_fraction: float = DEFAULT_MARGIN_FRACTION,
 ) -> BoxPlan:
     """Periodic box + grafting lattice for `nmol` chains.
 
@@ -272,17 +312,34 @@ def plan_box(
     Shared by `sim new` and the analyze.ipynb planning cell so both agree on
     the same box math.
 
-    The chains are laid out on an exactly-filled nx-by-ny lattice and the box
-    is exactly nx*spacing by ny*spacing, so the periodic images continue the
-    lattice without a seam: the simulation represents an infinite grafted
-    surface, and a chain at the edge is as crowded as one in the middle. That
-    is also why there is no empty margin around the grid — a margin would make
-    this a finite patch whose rim chains are under-crowded.
+    The chains are laid out on an exactly-filled nx-by-ny lattice, and
+    `margin_fraction` sets how much empty surface is left between the outermost
+    grafting points and the box wall — `margin = margin_fraction * spacing` on
+    each side, so the box is nx*spacing + 2*margin by ny*spacing + 2*margin.
 
-    Molecules do still cross the periodic boundary and get wrapped in the
-    trajectory, which looks like them teleporting across the box; that is a
-    representation artefact of correct periodic dynamics, and the analyze
-    notebook unwraps it rather than the box trying to avoid it.
+    The default is no margin, and that is the physically clean choice: the box
+    is then exactly nx*spacing by ny*spacing, the periodic images continue the
+    lattice without a seam, and a rim chain — half a spacing from the wall, half
+    a spacing from the wall on the other side — sits exactly one spacing from
+    its neighbour across the boundary, as crowded as one in the middle. The run
+    is a uniform infinite grafted surface.
+
+    A margin trades that uniformity for a more readable trajectory. A chain that
+    leans past the boundary is written wrapped to the opposite side of the box,
+    which looks like it teleporting; the dynamics are correct and the analyze
+    notebook unwraps it, but it is much easier to watch if it rarely happens at
+    all. margin_fraction=0.5 puts the edge chains a full spacing from the wall,
+    which is what stops most of the wrapping. The cost is that neighbours across
+    the boundary are then spacing + 2*margin apart instead of spacing, so the
+    rim is less crowded than the middle: the run becomes a finite grafted patch
+    repeated periodically rather than a strictly uniform surface. Worth it for
+    per-chain observables (Rg, height, RMSD); not worth it for anything that
+    depends on uniform lateral crowding.
+
+    `spacing` always means the nearest-neighbour distance on the lattice, so the
+    concentration / mass knobs keep their meaning whatever the margin; the
+    margin dilutes the *box-averaged* density, reported separately as
+    `box_concentration` / `box_mass_concentration`.
     """
     given = [concentration, spacing_fraction, mass_concentration]
     if sum(value is not None for value in given) != 1:
@@ -290,6 +347,9 @@ def plan_box(
             "Give exactly one of concentration (chains/nm^2), spacing_fraction "
             "(fraction of the chain's own length) or mass_concentration (ug/cm^2)."
         )
+
+    if margin_fraction < 0:
+        raise typer.BadParameter("margin_fraction cannot be negative.")
 
     n_residues = len(sequence) if isinstance(sequence, str) else int(sequence)
     chain_mass = chain_molar_mass(sequence) if isinstance(sequence, str) else 0.0
@@ -325,18 +385,26 @@ def plan_box(
         spacing_raw = 1.0 / math.sqrt(concentration)
 
     # OpenMM needs the nonbonded cutoff below half the box, so the *short* side
-    # of the box has to clear MIN_BOX_L. The only way to widen the box without
-    # breaking the tiling (nmol is fixed) is to spread the chains further
-    # apart, which lowers the concentration (raises the achieved fraction) —
-    # reported loudly by the caller.
-    scale = max(1.0, MIN_BOX_L / (min(nx, ny) * spacing_raw))
+    # of the box has to clear MIN_BOX_L. With nmol fixed the only way to widen
+    # the box is to spread the chains further apart, which lowers the
+    # concentration (raises the achieved fraction) — reported loudly by the
+    # caller. The margin counts towards the floor, so a generous margin can be
+    # what gets a small run over it.
+    short_side_cells = min(nx, ny) + 2 * margin_fraction
+    scale = max(1.0, MIN_BOX_L / (short_side_cells * spacing_raw))
     clamped = scale > 1.0
     spacing = round(spacing_raw * scale, 3)
 
-    # Exact multiples of the spacing: this is what makes the tiling seamless.
-    l_box_x = round(nx * spacing, 6)
-    l_box_y = round(ny * spacing, 6)
-    achieved_concentration = nmol / (l_box_x * l_box_y)
+    # The empty rim on each side. Rounded like the spacing so the numbers
+    # written into prepare.py reproduce the box exactly.
+    margin = round(margin_fraction * spacing, 3)
+
+    l_box_x = round(nx * spacing + 2 * margin, 6)
+    l_box_y = round(ny * spacing + 2 * margin, 6)
+    # The density the chains feel is set by the lattice; the box average is what
+    # the margin dilutes it to. They are the same number when margin == 0.
+    achieved_concentration = 1.0 / spacing ** 2
+    box_concentration = nmol / (l_box_x * l_box_y)
 
     # Rough lower bound on a chain's own footprint (random-walk end-to-end
     # estimate at the CALVADOS bond length). If molecules start
@@ -361,6 +429,10 @@ def plan_box(
         length_measure,
         chain_mass,
         mass_per_area(chain_mass, spacing),
+        margin,
+        margin_fraction,
+        box_concentration,
+        mass_per_area(chain_mass, spacing) * box_concentration / achieved_concentration,
     )
 
 
@@ -376,16 +448,21 @@ def plan_steps(steps: int, max_n_save: int = 7000) -> tuple[int, int, int]:
     return n_save, n_frames, actual_steps
 
 
-def lattice_positions(nmol: int, spacing: float) -> list[tuple[float, float]]:
-    """Grafting-point (x, y) of every molecule, in nm, on the tiling lattice.
+def lattice_positions(nmol: int, spacing: float, margin: float = 0.0) -> list[tuple[float, float]]:
+    """Grafting-point (x, y) of every molecule, in nm, on the lattice.
 
     Row-major over the nx-by-ny lattice from plan_lattice, each molecule at the
-    *centre* of its spacing-by-spacing cell. The generated prepare.py's
-    build_sim() computes exactly the same positions, so previews (e.g. the
-    analyze.ipynb planning cell) can reproduce the real starting layout.
+    *centre* of its spacing-by-spacing cell, with the whole lattice shifted in
+    by `margin` so the empty rim plan_box left is on all four sides. The
+    generated prepare.py's build_sim() computes exactly the same positions, so
+    previews (e.g. the analyze.ipynb planning cell) reproduce the real starting
+    layout.
     """
     nx, _ny = plan_lattice(nmol)
-    return [((i % nx + 0.5) * spacing, (i // nx + 0.5) * spacing) for i in range(nmol)]
+    return [
+        (margin + (i % nx + 0.5) * spacing, margin + (i // nx + 0.5) * spacing)
+        for i in range(nmol)
+    ]
 
 
 PREPARE_TEMPLATE = '''import os
@@ -396,20 +473,34 @@ from pathlib import Path
 import numpy as np
 import mdtraj as md
 from tools.paths import ensure_runtime_dir
-from tools.metadata import write_metadata
+from tools.metadata import write_lattice, write_metadata
+from tools.crosslink import CrosslinkSettings, write_settings
+
+# Grafting lattice: __NX__ x __NY__ points, one chain per spacing x spacing
+# cell, with an empty `margin` rim between the outermost points and the box
+# wall on every side (box = nx*spacing + 2*margin). The rim keeps chains away
+# from the periodic boundary, so they rarely lean across it and get wrapped to
+# the far side of the trajectory; the cost is that neighbours across the
+# boundary sit spacing + 2*margin apart, so rim chains are a little less
+# crowded than the ones in the middle. margin = 0 restores the seamless tiling.
+nx, ny = __NX__, __NY__
+# __SPACING_NOTE__
+spacing = __SPACING__
+# __MARGIN_NOTE__
+margin = __MARGIN__
+
+# Reactive crosslinking. None = off, and then run.py takes the stock CALVADOS
+# path unchanged. A dict turns it on — see tools/crosslink.py for what the
+# numbers mean and, just as importantly, what they don't.
+# __CROSSLINK_NOTE__
+crosslink = __CROSSLINK__
+
 
 def build_sim(sim: Sim):
      components = sim.components
 
-     # Chains sit on an exactly-filled __NX__ x __NY__ lattice, one per
-     # spacing x spacing cell, and the box is exactly that lattice wide. The
-     # periodic images therefore continue the lattice without a seam, so this
-     # is an infinite grafted surface and every chain is equally crowded.
-     # Placing each chain at the *centre* of its cell (the +0.5) keeps it as far
-     # from the box edge as the lattice allows.
-     nx, ny = __NX__, __NY__
-     # __SPACING_NOTE__
-     spacing = __SPACING__
+     # Each chain goes at the *centre* of its own cell (the +0.5), offset by the
+     # margin — exactly what tools.new_simulation.lattice_positions previews.
 
      ibead = 0
      i = 0
@@ -424,8 +515,8 @@ def build_sim(sim: Sim):
           for idx in range(comp.nmol):
                j = ibead + comp.nbeads
 
-               x0 = (i % nx + 0.5) * spacing
-               y0 = (i // nx + 0.5) * spacing
+               x0 = margin + (i % nx + 0.5) * spacing
+               y0 = margin + (i // nx + 0.5) * spacing
 
                # Bead 0 is the "Z"-tagged bead. CALVADOS gives "Z" a molecular
                # weight of -2 which the +2 N-terminus patch cancels to exactly
@@ -527,6 +618,17 @@ if __name__ == "__main__":
 
      (runtime_dir / "job.sh").write_text(job_file)
 
+     # The box alone doesn't say where the lattice inside it sits (spacing and
+     # margin are two unknowns in one number), so record them next to the
+     # trajectory for metadata.csv to pick up.
+     write_lattice(runtime_dir, nx=nx, ny=ny, spacing=spacing, margin=margin)
+
+     # run.py reads this file to decide whether the run reacts. Written (or
+     # removed) every time, so a regenerated non-reactive run can never inherit
+     # a stale crosslink.yaml from a previous attempt.
+     write_settings(runtime_dir,
+                    CrosslinkSettings.from_dict(crosslink) if crosslink else None)
+
      # Settings snapshot next to the trajectory-to-be. run.py rewrites it when
      # the run finishes (status/frame count); `sim metadata` refreshes it any time.
      write_metadata(runtime_dir)
@@ -547,12 +649,34 @@ def create_simulation(
     spacing_fraction: float | None = None,
     length_measure: str = "contour",
     mass_concentration: float | None = None,
+    margin_fraction: float = DEFAULT_MARGIN_FRACTION,
+    crosslink_distance: float | None = None,
+    crosslink_valence: int = 1,
+    crosslink_prob: float = 1.0,
+    crosslink_check_every: int = 1000,
+    crosslink_k: float = 2000.0,
+    crosslink_r0: float = 0.6,
+    crosslink_ramp_steps: int = 500,
+    crosslink_selection: list[int] | None = None,
+    crosslink_start_step: int = 0,
+    crosslink_seed: int | None = None,
 ) -> Path:
     """Scaffold simulations/<name>/prepare.py and run it. Returns the sim folder.
 
     Pass exactly one of `concentration` (chains/nm^2), `spacing_fraction`
     (fraction of this ELP's own length) or `mass_concentration` (ug/cm^2, the
     same grafted mass per area whatever the chain length) — see plan_box.
+
+    `margin_fraction` is the empty rim left around the lattice, as a fraction of
+    the spacing (see plan_box). It defaults to 0 — a seamless, uniformly crowded
+    lattice; raise it to keep chains off the periodic boundary so they stop
+    wrapping to the far side of the trajectory.
+
+    `crosslink_distance` (nm) turns on reactive crosslinking: lysine pairs that
+    come within it bond permanently *during* the run. None — the default — leaves
+    the run non-reactive and bit-for-bit what it was before the feature existed.
+    The other crosslink_* arguments only matter when it is set; see
+    tools/crosslink.py for what they mean and how far the results can be trusted.
     """
 
     if nmol < 1:
@@ -573,11 +697,29 @@ def create_simulation(
         )
 
     box_plan = plan_box(seq, concentration, nmol, spacing_fraction, length_measure,
-                        mass_concentration)
+                        mass_concentration, margin_fraction)
     spacing = box_plan.spacing
+    margin = box_plan.margin
     min_sane_spacing = box_plan.min_sane_spacing
 
     n_save, n_frames, actual_steps = plan_steps(steps, max_n_save=max_n_save)
+
+    # Validated here rather than at run time: a typo in a crosslink setting
+    # should stop you now, not eight hours into a GPU job.
+    crosslink_settings = None
+    if crosslink_distance is not None:
+        crosslink_settings = CrosslinkSettings(
+            distance=crosslink_distance,
+            valence=crosslink_valence,
+            prob=crosslink_prob,
+            check_every=crosslink_check_every,
+            k=crosslink_k,
+            r0=crosslink_r0,
+            ramp_steps=crosslink_ramp_steps,
+            selection=tuple(crosslink_selection) if crosslink_selection else None,
+            start_step=crosslink_start_step,
+            seed=crosslink_seed,
+        )
 
     if spacing_fraction is not None:
         spacing_note = (f"spacing = {spacing_fraction} x the chain's own {length_measure} length "
@@ -589,11 +731,31 @@ def create_simulation(
         spacing_note = f"spacing = 1/sqrt({concentration} chains/nm^2)"
     if box_plan.clamped:
         spacing_note += f", widened to {spacing} nm to clear the {MIN_BOX_L} nm box floor"
+    if margin:
+        margin_note = (f"margin = {margin_fraction} x the {spacing} nm spacing, empty on every "
+                       f"side, so chains start {margin} nm clear of the periodic boundary")
+    else:
+        margin_note = ("margin = 0: the lattice fills the box exactly, so the periodic images "
+                       "continue it seamlessly and every chain is equally crowded")
+
+    if crosslink_settings is None:
+        crosslink_note = "crosslinking off (crosslink_distance = None)"
+        crosslink_literal = "None"
+    else:
+        crosslink_note = (
+            f"lysine pairs within {crosslink_settings.distance} nm "
+            f"({crosslink_settings.distance_angstrom} A) bond during the run, "
+            f"valence {crosslink_settings.valence}, p={crosslink_settings.prob}")
+        crosslink_literal = repr(crosslink_settings.to_dict())
 
     content = (
         PREPARE_TEMPLATE
         .replace("__SPACING_NOTE__", spacing_note)
         .replace("__SPACING__", str(spacing))
+        .replace("__MARGIN_NOTE__", margin_note)
+        .replace("__MARGIN__", str(margin))
+        .replace("__CROSSLINK_NOTE__", crosslink_note)
+        .replace("__CROSSLINK__", crosslink_literal)
         .replace("__NX__", str(box_plan.nx))
         .replace("__NY__", str(box_plan.ny))
         .replace("__L_X__", str(box_plan.l_box_x))
@@ -616,15 +778,26 @@ def create_simulation(
 
     typer.echo(f"✓  Created simulations/{slug}/prepare.py")
     typer.echo(f"   box:        [{box_plan.l_box_x}, {box_plan.l_box_y}, {Z_HEIGHT}] nm")
-    typer.echo(f"   lattice:    {box_plan.nx} x {box_plan.ny} grafting points, {spacing} nm apart, "
-               f"tiling the box exactly (infinite surface via the periodic images)")
+    typer.echo(f"   lattice:    {box_plan.nx} x {box_plan.ny} grafting points, {spacing} nm apart")
+    if margin:
+        typer.echo(f"   margin:     {margin} nm of empty surface on every side "
+                   f"({margin_fraction} x the spacing) — chains this far from the periodic "
+                   f"boundary, so neighbours across it are {round(spacing + 2 * margin, 3)} nm apart")
+    else:
+        typer.echo("   margin:     none (default) — the lattice tiles the box exactly, so the "
+                   "periodic images continue it seamlessly and every chain is equally "
+                   "crowded; chains do reach the boundary and wrap")
     typer.echo(f"   chain:      {len(seq)} residues, {box_plan.chain_length:.2f} nm "
                f"({length_measure} length) — spacing is "
                f"{box_plan.achieved_spacing_fraction:.3f} x that")
-    typer.echo(f"   density:    {round(box_plan.achieved_concentration, 5)} chains/nm^2")
+    typer.echo(f"   density:    {round(box_plan.achieved_concentration, 5)} chains/nm^2 on the lattice"
+               + (f", {round(box_plan.box_concentration, 5)} averaged over the box "
+                  f"(the margin dilutes it)" if margin else ""))
     typer.echo(f"   mass:       {box_plan.chain_mass_da / 1000:.2f} kDa per chain, "
                f"{box_plan.achieved_mass_concentration:.4f} ug/cm^2 grafted "
-               f"({box_plan.achieved_mass_concentration * 10:.3f} mg/m^2)")
+               f"({box_plan.achieved_mass_concentration * 10:.3f} mg/m^2)"
+               + (f"; {box_plan.box_mass_concentration:.4f} ug/cm^2 over the whole box"
+                  if margin else ""))
     if box_plan.clamped:
         if spacing_fraction is not None:
             requested_spacing = spacing_fraction * box_plan.chain_length
@@ -639,13 +812,14 @@ def create_simulation(
             asked_for = f"{concentration} chains/nm^2 ({requested_spacing:.2f} nm apart)"
         typer.echo(
             f"⚠  the requested {asked_for} would make the short side of the box "
-            f"{round(min(box_plan.nx, box_plan.ny) * requested_spacing, 2)} nm, below the "
+            f"{round((min(box_plan.nx, box_plan.ny) + 2 * margin_fraction) * requested_spacing, 2)} nm "
+            f"(lattice + margin), below the "
             f"{MIN_BOX_L} nm floor required by CALVADOS's default cutoffs — the chains were spread "
             f"out to {spacing} nm instead ({round(box_plan.achieved_concentration, 5)} chains/nm^2, "
             f"{box_plan.achieved_mass_concentration:.4f} ug/cm^2, "
             f"{box_plan.achieved_spacing_fraction:.3f} x the chain length)."
         )
-        bigger = smallest_untilted_nmol(requested_spacing, nmol)
+        bigger = smallest_untilted_nmol(requested_spacing, nmol, margin_fraction=margin_fraction)
         if bigger is not None:
             bx, by = plan_lattice(bigger)
             typer.echo(
@@ -668,6 +842,23 @@ def create_simulation(
             f"and/or fewer molecules."
         )
     typer.echo(f"   molecules:  {nmol}")
+    if crosslink_settings is not None:
+        typer.echo(f"   crosslink:  ON — lysine pairs within "
+                   f"{crosslink_settings.distance} nm ({crosslink_settings.distance_angstrom} A) "
+                   f"bond during the run; valence {crosslink_settings.valence}, "
+                   f"p={crosslink_settings.prob}, checked every "
+                   f"{crosslink_settings.check_every} steps")
+        if crosslink_settings.start_step:
+            typer.echo(f"               reactions ignored before step "
+                       f"{crosslink_settings.start_step} "
+                       f"({crosslink_settings.start_step * 0.01 / 1000:.3f} ns)")
+        else:
+            typer.echo("⚠  crosslink_start_step is 0, so contacts left over from the initial "
+                       "placement count as reactions. Set it past equilibration — the analyze "
+                       "notebook's Rg/RMSD check says where that is.")
+    else:
+        typer.echo("   crosslink:  off (default) — nothing reacts, identical to the "
+                   "pre-crosslinking pipeline")
     typer.echo(f"   platform:   {platform}")
     if actual_steps != steps:
         typer.echo(f"   steps:      {actual_steps} (rounded from {steps} to a multiple of the {n_save}-step save frequency)")
@@ -728,6 +919,72 @@ def new(
         typer.Option(help="Which chain length spacing-fraction is a fraction of: "
                           "'contour' (fully extended) or 'coil' (random-walk size)."),
     ] = "contour",
+    margin_fraction: Annotated[
+        float,
+        typer.Option(
+            help="Empty surface left between the outermost chains and the box wall, as a "
+                 "fraction of the spacing, on each side. Default 0 = the lattice tiles the "
+                 "box exactly, so every chain is equally crowded (but chains reach the "
+                 "boundary and wrap). 0.5 keeps chains a full spacing clear of the boundary "
+                 "so they stop wrapping, at the cost of a less crowded rim.",
+        ),
+    ] = DEFAULT_MARGIN_FRACTION,
+    crosslink_distance: Annotated[
+        float | None,
+        typer.Option(
+            help="Turn on reactive crosslinking: lysine pairs that come within this distance "
+                 "IN NANOMETRES bond permanently during the run (0.8 nm = 8 A). Default off, "
+                 "which leaves the run bit-for-bit identical to the non-reactive pipeline.",
+        ),
+    ] = None,
+    crosslink_valence: Annotated[
+        int,
+        typer.Option(help="Max bonds per lysine. 1 = bifunctional crosslinker at 1:1 "
+                          "(glutaraldehyde-like); 2 = trifunctional junctions (THPP-like)."),
+    ] = 1,
+    crosslink_prob: Annotated[
+        float,
+        typer.Option(help="Probability a within-cutoff pair reacts at a given check. "
+                          "1.0 = diffusion-limited; below that the reaction rate is "
+                          "decoupled from the diffusion rate (sweep for Damkohler)."),
+    ] = 1.0,
+    crosslink_check_every: Annotated[
+        int,
+        typer.Option(help="MD steps between reaction checks."),
+    ] = 1000,
+    crosslink_k: Annotated[
+        float,
+        typer.Option(help="Final crosslink stiffness, kJ/mol/nm^2."),
+    ] = 2000.0,
+    crosslink_r0: Annotated[
+        float,
+        typer.Option(help="Crosslink equilibrium length, nm."),
+    ] = 0.6,
+    crosslink_ramp_steps: Annotated[
+        int,
+        typer.Option(help="Steps over which a new bond's stiffness rises from 0 to the full "
+                          "value. Ramping avoids the energy spike of switching a stiff bond "
+                          "on instantaneously."),
+    ] = 500,
+    crosslink_start_step: Annotated[
+        int,
+        typer.Option(help="Ignore reactions before this step. Set it past equilibration: "
+                          "contacts in the early frames are artefacts of the initial "
+                          "placement, not encounters the dynamics produced."),
+    ] = 0,
+    crosslink_selection: Annotated[
+        list[int] | None,
+        typer.Option(
+            help="Explicit reactive bead indices (0-based), repeat the flag per bead. "
+                 "Default: auto-detect lysines. Beads at residue 0 of a chain are dropped "
+                 "either way — those are the fixed surface anchors.",
+        ),
+    ] = None,
+    crosslink_seed: Annotated[
+        int | None,
+        typer.Option(help="Seed for the reaction RNG (only used when --crosslink-prob < 1). "
+                          "Defaults to the run's OpenMM seed, else a recorded random draw."),
+    ] = None,
 ) -> None:
     """Scaffold and prepare a new surface-attached ELP simulation.
 
@@ -768,6 +1025,17 @@ def new(
         spacing_fraction=spacing_fraction,
         length_measure=length_measure,
         mass_concentration=mass_concentration,
+        margin_fraction=margin_fraction,
+        crosslink_distance=crosslink_distance,
+        crosslink_valence=crosslink_valence,
+        crosslink_prob=crosslink_prob,
+        crosslink_check_every=crosslink_check_every,
+        crosslink_k=crosslink_k,
+        crosslink_r0=crosslink_r0,
+        crosslink_ramp_steps=crosslink_ramp_steps,
+        crosslink_start_step=crosslink_start_step,
+        crosslink_selection=crosslink_selection,
+        crosslink_seed=crosslink_seed,
     )
 
 
