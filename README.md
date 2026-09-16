@@ -106,6 +106,12 @@ The `runtime/` folder is generated and not committed. You **should NOT**
 need to edit anything inside it by hand: `prepare.py` regenerates it
 idempotently, so running prepare on any machine produces the exact same result.
 
+The Analyze section of `analyze.ipynb` writes its results — the equilibration
+verdict, the crosslinking counts, every plot — into `analysis/`, next to
+`prepare.py` (`simulations/<sim_name>/analysis/`). Unlike `runtime/`, `analysis/`
+**is** committed: it's small (text + PNGs), so pushing it is how a DelftBlue
+checkout gets the same numbers and figures without re-running the notebook there.
+
 ## Preparing and running simulations
 
 After `uv sync`, the `sim` CLI is available inside the venv. Activate it once:
