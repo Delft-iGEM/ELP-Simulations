@@ -15,6 +15,7 @@ Commands:
   sim distribution           Plot a residue's z-axis distribution across all frames
   sim crosslink <simulation> Detect crosslinks post-hoc in a finished trajectory
                              (the comparison against a reactive run)
+  sim used                   Names/sequences already submitted (--backfill to fill gaps)
 
 Flags:
   sim run --clean <simulation>   Delete runtime/, prepare, then run
@@ -251,6 +252,13 @@ def submit(
     root = _project_root()
     _run(["sbatch", str(job_script)], cwd=root)
 
+    # Same list the notebook's batch cell appends to, so a name submitted
+    # one-off here is just as taken as one submitted from a CSV.
+    from tools.run_batch import REGISTRY_FILENAME, record_simulation
+
+    if record_simulation(sim_path, csv_name="sim submit"):
+        typer.echo(f"✓  recorded in {REGISTRY_FILENAME}")
+
 
 @app.command()
 def clean(
@@ -387,9 +395,16 @@ def crosslink(
 
     Writes crosslink_events_posthoc.csv / crosslink_summary_posthoc.txt beside the
     trajectory, leaving any reactive run's own output untouched.
+
+    On a free/preattached run residue 0 is an ordinary residue (kept as a site),
+    and a lysine the run bonded to the surface is kept out of the pair pool from
+    that step on, exactly as the live run did.
     """
-    from tools.crosslink import CrosslinkSettings, post_hoc_events
+    import csv as _csv
+
+    from tools.crosslink import CSV_COLUMNS, EVENTS_FILENAME, CrosslinkSettings, post_hoc_events
     from tools.metadata import as_float, read_metadata
+    from tools.surface import mode_of
 
     sim_path = _validate_sim(simulation)
     runtime_dir = sim_path / "runtime"
@@ -410,15 +425,23 @@ def crosslink(
 
     settings = CrosslinkSettings(distance=distance, valence=valence, prob=prob,
                                  check_every=n_save, start_step=start_step, seed=seed)
+    mode = mode_of(runtime_dir)
+    surface_rows = None
+    if mode != "brush":
+        record = runtime_dir / EVENTS_FILENAME
+        if record.is_file():
+            with open(record, newline="") as f:
+                surface_rows = [r for r in _csv.DictReader(f) if r.get("kind") == "surface"]
+        typer.echo(f"   mode {mode}: residue 0 is an ordinary residue; "
+                   f"{len(surface_rows or [])} surface-bonded lysine(s) excluded from pairing "
+                   f"from the step they bound")
     typer.echo(f"▶  Post-hoc crosslink detection on {simulation}: {settings.banner()}")
-    xl = post_hoc_events(traj, top, settings, n_save=n_save, seed=seed)
+    xl = post_hoc_events(traj, top, settings, n_save=n_save, seed=seed,
+                         drop_anchor=(mode == "brush"), surface_rows=surface_rows)
 
     events = runtime_dir / "crosslink_events_posthoc.csv"
     summary = runtime_dir / "crosslink_summary_posthoc.txt"
     rows = xl.event_rows(n_save)
-    import csv as _csv
-
-    from tools.crosslink import CSV_COLUMNS
 
     with open(events, "w", newline="") as f:
         writer = _csv.DictWriter(f, fieldnames=CSV_COLUMNS)
@@ -446,6 +469,38 @@ def list_simulations() -> None:
     typer.echo("Available simulations:")
     for s in sims:
         typer.echo(f"  {s}")
+
+
+@app.command(name="used")
+def used_runs(
+    backfill: Annotated[
+        bool,
+        typer.Option("--backfill", help="First add any simulation on disk that isn't listed yet."),
+    ] = False,
+) -> None:
+    """Show used-runs.csv — every run name and sequence already submitted.
+
+    This is the list the notebook's batch cell checks a new CSV against before
+    it queues anything, and appends to once the jobs are away.
+    """
+    from tools.run_batch import backfill_registry, read_registry, registry_path
+
+    if backfill:
+        added = backfill_registry()
+        typer.echo(f"✓  {len(added)} simulation(s) added: {', '.join(added) or '—'}")
+
+    rows = read_registry()
+    if not rows:
+        typer.echo(f"{registry_path().name} is empty — nothing has been submitted yet.")
+        return
+
+    typer.echo(f"{registry_path()} — {len(rows)} run(s):")
+    for row in rows:
+        typer.echo(
+            f"  {row['name']:<28} {row.get('n_residues', '?'):>5} res  "
+            f"x{row.get('nmol', '?'):<5} {row.get('walltime', ''):>9}  "
+            f"{row.get('submitted_utc', '')[:10]}"
+        )
 
 
 # ---------------------------------------------------------------------------

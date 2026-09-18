@@ -49,6 +49,12 @@ from tools.crosslink import (
     EVENTS_FILENAME,
     load_settings as load_crosslink_settings,
 )
+from tools.surface import (
+    STATE_FILENAME as SURFACE_STATE_FILENAME,
+    SURFACE_FILENAME,
+    load_settings as load_surface_settings,
+    summarize_event_rows,
+)
 from tools.new_simulation import (
     BOND_L,
     Z_HEIGHT,
@@ -67,6 +73,19 @@ METADATA_FILENAME = "metadata.csv"
 # exactly what they are.
 LATTICE_FILENAME = "lattice.yaml"
 
+# How long the run actually took, written by template/run.py around
+# sim.simulate(). "Is it better to send one big job or several small ones?" is a
+# question about wall-clock time per simulation, and nothing CALVADOS writes
+# records it — so run.py times itself and this file is the record. A run that
+# hits its walltime and is resubmitted from its checkpoint adds a second "leg",
+# so the totals here are the cost of the whole simulation, not of one job.
+TIMING_FILENAME = "timing.yaml"
+
+# The SLURM job script prepare.py generated, parsed back for the resources the
+# run was *asked* for (walltime, partition, CPUs) — the other half of the
+# comparison with what it actually used.
+JOB_FILENAME = "job.sh"
+
 # CALVADOS's Langevin integrator uses a fixed 0.01 ps step (calvados/sim.py);
 # it is not part of config.yaml, so it has to be recorded here.
 DT_PS = 0.01
@@ -84,6 +103,17 @@ def _read_yaml(path: Path) -> dict:
         return {}
     with open(path) as f:
         return safe_load(f) or {}
+
+
+def _read_json(path: Path) -> dict:
+    import json
+
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text()) or {}
+    except ValueError:
+        return {}
 
 
 def _read_fasta(path: Path) -> dict[str, str]:
@@ -122,6 +152,37 @@ def dcd_n_frames(path: Path) -> int | None:
     return struct.unpack(endian + "i", head[8:12])[0]
 
 
+def dcd_z_extent(dcd: Path, top: Path) -> tuple[float, float] | None:
+    """(lowest, highest) bead z in nm over the whole trajectory, or None.
+
+    The box is periodic in z, so this is the check that the brush never got
+    within the nonbonded cutoff of the box top (where it would have felt the
+    periodic image of the grafted layer). Reads the DCD frame by frame through
+    MDAnalysis; a missing file, topology or package just leaves the field
+    blank rather than failing the metadata.
+    """
+    if not (dcd.is_file() and top.is_file()):
+        return None
+    try:
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import MDAnalysis as mda
+
+            u = mda.Universe(str(top), str(dcd))
+            lo, hi = math.inf, -math.inf
+            for ts in u.trajectory:
+                z = ts.positions[:, 2]
+                lo = min(lo, float(z.min()))
+                hi = max(hi, float(z.max()))
+    except Exception:
+        return None
+    if not math.isfinite(hi):
+        return None
+    return lo / 10.0, hi / 10.0   # A -> nm
+
+
 def _z_wall_from_expr(expr: str | None) -> float | str:
     """The wall position out of CALVADOS's ext_force_expr, e.g. step(1.9-z)*... -> 1.9."""
     if not expr:
@@ -143,12 +204,12 @@ def _round(value: float, digits: int = 6) -> float:
     return round(value, digits)
 
 
-def _count_rows(path: Path) -> int | None:
-    """Data rows in a CSV, or None if it isn't there (i.e. the run didn't react)."""
+def _read_rows(path: Path) -> list[dict[str, str]] | None:
+    """Rows of a CSV, or None if it isn't there (i.e. the run didn't react)."""
     if not path.is_file():
         return None
     with open(path, newline="") as f:
-        return sum(1 for _ in csv.DictReader(f))
+        return list(csv.DictReader(f))
 
 
 def collect_metadata(runtime_dir: Path) -> list[Field]:
@@ -237,20 +298,61 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
     # Reactive crosslinking, if the run had any. Absent crosslink.yaml = the run
     # was not reactive, which is the default and most runs.
     crosslink = load_crosslink_settings(runtime_dir)
-    n_crosslinks = _count_rows(runtime_dir / EVENTS_FILENAME)
+    event_rows = _read_rows(runtime_dir / EVENTS_FILENAME)
+    # The event record holds both lysine-lysine bonds and (in the lysine-attached
+    # modes) lysine-surface bonds; count them apart.
+    n_crosslinks = None if event_rows is None else \
+        sum(1 for r in event_rows if r.get("kind") != "surface")
+
+    # How the chains are attached. No surface.yaml = brush, the default: residue
+    # 0 is the fixed "Z" anchor. Otherwise chains hang from surface-bonded
+    # lysines and the event record says how many.
+    surface = load_surface_settings(runtime_dir)
+    mode = surface.mode if surface else "brush"
+    surface_stats = summarize_event_rows(event_rows or [], nmol) if surface else {}
+    surface_state = _read_json(runtime_dir / SURFACE_STATE_FILENAME) if surface else {}
+    n_lysines = seq.count("K") * nmol if seq else 0
 
     steps = int(config.get("steps", 0) or 0)
     wfreq = int(config.get("wfreq", 0) or 0)
     n_frames_planned = steps // wfreq if wfreq else 0
 
+    # What the job asked SLURM for, and what it actually used. Together these
+    # answer "one big job or several small ones?": wall_seconds is what a run
+    # costs, ns_per_hour is the rate to extrapolate an unrun sequence from, and
+    # walltime_used_fraction says how much of the request was slack.
+    job = _read_job_settings(runtime_dir)
+    walltime_requested = job.get("time", "")
+    walltime_requested_s = parse_slurm_time(walltime_requested)
+
+    timing = _read_yaml(runtime_dir / TIMING_FILENAME)
+    wall_seconds = float(timing.get("wall_seconds_total", 0.0) or 0.0) if timing else math.nan
+
     dcd = runtime_dir / f"{sim_name}.dcd"
     n_frames_saved = dcd_n_frames(dcd)
+    # Rates are quoted per nanosecond *produced*, not per nanosecond requested,
+    # so they stay honest for a run that was cut short by its walltime.
+    steps_done = (n_frames_saved or 0) * wfreq
+    ns_simulated = steps_done * DT_PS / 1000
     if n_frames_saved is None:
         status = "not started"
     elif n_frames_planned and n_frames_saved >= n_frames_planned:
         status = "completed"
     else:
         status = "incomplete"
+
+    # How close the brush came to the top of the (periodic) box. Anything less
+    # than the electrostatics cutoff of headroom means the tallest beads were
+    # interacting with the image of the grafted layer — rerun with a taller box.
+    cutoff_yu = float(config.get("cutoff_yu", 4.0) or 4.0)
+    z_extent = dcd_z_extent(dcd, runtime_dir / "top.pdb") if n_frames_saved else None
+    z_min = _round(z_extent[0], 3) if z_extent else ""
+    z_max = _round(z_extent[1], 3) if z_extent else ""
+    headroom = _round(l_z - z_extent[1], 3) if z_extent else ""
+    if z_extent is None:
+        box_tall_enough = ""
+    else:
+        box_tall_enough = bool(l_z - z_extent[1] >= cutoff_yu)
 
     return [
         Field("sim_name", sim_name, "", "Simulation folder under simulations/"),
@@ -259,7 +361,11 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
         Field("status", status, "", "not started / incomplete / completed, from the DCD frame count"),
 
         # ---- what was simulated ----
-        Field("sequence", seq, "", "Sequence as simulated; residue 0 is 'Z', the grafted anchor bead"),
+        Field("sequence", seq, "", "Sequence as simulated; in brush mode residue 0 is 'Z', the "
+              "grafted anchor bead"),
+        Field("mode", mode, "", "How chains attach to the surface: brush (residue 0 fixed on the "
+              "lattice), free or preattached (chains hang from surface-bonded lysines; see "
+              f"{SURFACE_FILENAME} and tools/surface.py)"),
         Field("sequence_names", seq_names, "", "FASTA entry name(s) in molecules.fasta"),
         Field("n_residues", n_residues, "residues", "Chain length in residues"),
         Field("nmol", nmol, "chains", "Number of ELP chains in the box"),
@@ -306,7 +412,16 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
         Field("lattice_ny", ny, "", "Grafting points along y"),
         Field("box_x_nm", l_x, "nm", "Periodic box, x"),
         Field("box_y_nm", l_y, "nm", "Periodic box, y"),
-        Field("box_z_nm", l_z, "nm", "Periodic box, z (height above the surface)"),
+        Field("box_z_nm", l_z, "nm", "Periodic box, z. Periodic like x and y: the brush plus the "
+              "cutoff must stay below it (see box_headroom_nm)"),
+        Field("z_min_nm", z_min, "nm", "Lowest bead z over the whole trajectory"),
+        Field("z_max_nm", z_max, "nm", "Highest bead z over the whole trajectory"),
+        Field("box_headroom_nm", headroom, "nm", "box_z_nm - z_max_nm: how far the brush stayed "
+              "below the top of the periodic box"),
+        Field("box_tall_enough", box_tall_enough, "",
+              f"True = box_headroom_nm >= cutoff_yu ({cutoff_yu:g} nm), so no bead ever "
+              "interacted with the periodic image of the grafted layer; False = raise "
+              "box_height and rerun"),
 
         # ---- did it react? ----
         Field("crosslinking", bool(crosslink), "",
@@ -327,7 +442,50 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
         Field("crosslink_r0_nm", crosslink.r0 if crosslink else "", "nm",
               "Equilibrium length of a formed crosslink"),
         Field("crosslinks_formed", "" if n_crosslinks is None else n_crosslinks, "bonds",
-              f"Rows in {EVENTS_FILENAME} — see crosslink_summary.txt for the intra/inter split"),
+              f"Lysine-lysine rows in {EVENTS_FILENAME} — see crosslink_summary.txt for the "
+              "intra/inter split"),
+
+        # ---- how the chains hang from the surface (free / preattached only) ----
+        Field("surface_distance_nm", surface.distance if surface else "", "nm",
+              "A lysine within this vertical distance of the tether plane bonds to the surface"),
+        Field("surface_tether_nm", surface.tether if surface else "", "nm",
+              "How far above the wall onset a surface-bonded lysine sits"),
+        Field("surface_prob", surface.prob if surface else "", "",
+              "P(bind | within surface_distance at a check)"),
+        Field("surface_max_fraction", surface.max_fraction if surface else "", "",
+              "Global cap: the largest fraction of all lysines that may be surface-bonded"),
+        Field("surface_preattached_fraction",
+              surface.preattached_fraction if surface and surface.mode == "preattached" else "",
+              "", "preattached mode: fraction of all lysines bonded at t = 0"),
+        Field("surface_dynamic", surface.is_dynamic if surface else "", "",
+              "True = lysines may bind the surface during the run"),
+        Field("surface_k", surface.k if surface else "", "kJ/mol/nm^2", "Tether stiffness"),
+        Field("surface_start_step", surface.start_step if surface else "", "steps",
+              "Surface binding before this step was ignored"),
+        Field("surface_seed", surface.seed if surface else "", "",
+              "Seed that chose the initial pins (and drives binding when surface_prob < 1)"),
+        Field("lysines_total", n_lysines if surface else "", "lysines",
+              "Lysines in the system (chains x K per chain)"),
+        Field("surface_bonds", surface_stats.get("surface_bonds", "") if surface else "", "bonds",
+              "Lysines bonded to the surface (initial + during the run)"),
+        Field("surface_bonds_initial", surface_stats.get("surface_bonds_initial", "") if surface else "",
+              "bonds", "Surface bonds present at t = 0"),
+        Field("surface_bonds_run", surface_stats.get("surface_bonds_run", "") if surface else "",
+              "bonds", "Surface bonds formed during the run"),
+        Field("surface_fraction",
+              _round(surface_stats["surface_bonds"] / n_lysines, 6)
+              if surface and n_lysines and "surface_bonds" in surface_stats else "", "",
+              "surface_bonds / lysines_total"),
+        Field("surface_chains_with_1", surface_stats.get("chains_with_1", "") if surface else "",
+              "chains", "Chains holding on by exactly one surface bond"),
+        Field("surface_chains_with_2", surface_stats.get("chains_with_2", "") if surface else "",
+              "chains", "Chains with exactly two surface bonds"),
+        Field("surface_chains_with_3plus", surface_stats.get("chains_with_3plus", "") if surface else "",
+              "chains", "Chains with three or more surface bonds — a coating rather than a tether"),
+        Field("surface_cap_reached_step",
+              ("" if surface_state.get("cap_reached_step") is None else surface_state["cap_reached_step"])
+              if surface else "", "steps",
+              "Step at which the global cap was reached (blank = never, or not recorded yet)"),
 
         # ---- how long it ran ----
         Field("total_steps", steps, "steps", "Total MD steps requested"),
@@ -338,6 +496,39 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
         Field("timestep_ps", DT_PS, "ps", "Langevin timestep — fixed by CALVADOS, not configurable"),
         Field("time_per_frame_ps", _round(wfreq * DT_PS, 6), "ps", "Simulated time between saved frames"),
         Field("total_time_ns", _round(steps * DT_PS / 1000, 6), "ns", "Total simulated time"),
+
+        # ---- how long it took in the real world ----
+        Field("walltime_requested", walltime_requested, "HH:MM:SS",
+              f"SLURM --time from {JOB_FILENAME} — the limit the job was given, not what it used"),
+        Field("walltime_requested_hours",
+              "" if math.isnan(walltime_requested_s) else _round(walltime_requested_s / 3600, 4),
+              "h", "walltime_requested in hours"),
+        Field("partition", job.get("partition", ""), "", "SLURM partition the job asked for"),
+        Field("cpus_per_task", job.get("cpus-per-task", ""), "", "SLURM --cpus-per-task"),
+        Field("run_wall_seconds", "" if math.isnan(wall_seconds) else _round(wall_seconds, 3), "s",
+              f"Measured wall-clock time inside simulate(), from {TIMING_FILENAME}, summed over "
+              "every leg (a run resumed from its checkpoint has more than one). Empty = the run "
+              "hasn't finished, or predates this being recorded"),
+        Field("run_wall_clock", format_duration(wall_seconds), "H:MM:SS",
+              "run_wall_seconds, readable"),
+        Field("run_legs", timing.get("legs", "") if timing else "", "jobs",
+              "How many jobs it took — >1 means it hit the walltime and was resumed"),
+        Field("run_started_utc", str(timing.get("first_started_utc", "")) if timing else "", "",
+              "When the first leg started"),
+        Field("run_finished_utc", str(timing.get("finished_utc", "")) if timing else "", "",
+              "When the last leg finished"),
+        Field("walltime_used_fraction",
+              _round(wall_seconds / walltime_requested_s, 6)
+              if not math.isnan(wall_seconds) and walltime_requested_s > 0 else "",
+              "", "run_wall_seconds / walltime_requested — how much of the request was actually "
+              "needed (>1 means the job was killed at the limit)"),
+        Field("ns_per_hour", _round(ns_simulated / (wall_seconds / 3600), 4)
+              if not math.isnan(wall_seconds) and wall_seconds > 0 else "", "ns/h",
+              "Simulated nanoseconds per wall-clock hour — the rate to size the next run's "
+              "walltime with (frames actually written, so it is meaningful mid-run too)"),
+        Field("steps_per_second", _round(steps_done / wall_seconds, 2)
+              if not math.isnan(wall_seconds) and wall_seconds > 0 else "", "steps/s",
+              "MD steps per wall-clock second, the same rate in the other unit"),
 
         # ---- physics ----
         Field("temperature_K", config.get("temp", ""), "K", "Thermostat temperature"),
@@ -360,6 +551,79 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
         Field("calvados_version", _package_version("calvados"), "", "calvados package version"),
         Field("openmm_version", _package_version("openmm"), "", "openmm package version"),
     ]
+
+
+def _read_job_settings(runtime_dir: Path) -> dict[str, str]:
+    """``#SBATCH --key=value`` lines out of runtime/job.sh, as {key: value}.
+
+    The job script is the only place the requested walltime is written down
+    (SLURM gets it from there, CALVADOS never sees it), so it is also where it
+    is read back from — which means every run that already has a job.sh gets
+    these fields too, without regenerating anything.
+    """
+    path = Path(runtime_dir) / JOB_FILENAME
+    if not path.is_file():
+        return {}
+    settings: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        match = re.match(r"\s*#SBATCH\s+--([A-Za-z-]+)[=\s]+(.+?)\s*$", line)
+        if match:
+            settings[match.group(1)] = match.group(2)
+    return settings
+
+
+def parse_slurm_time(value: str) -> float:
+    """SLURM D-HH:MM:SS / HH:MM:SS / MM -> seconds. NaN if it isn't a duration."""
+    text = (value or "").strip()
+    if not text:
+        return math.nan
+    if text.isdigit():
+        return int(text) * 60
+    match = re.fullmatch(r"(?:(\d+)-)?(\d+):([0-5]?\d)(?::([0-5]?\d))?", text)
+    if not match:
+        return math.nan
+    days, first, second, third = match.groups()
+    hours, minutes, seconds = (int(first), int(second), int(third or 0)) if third is not None \
+        else (int(first), int(second), 0)
+    return ((int(days or 0) * 24 + hours) * 60 + minutes) * 60 + seconds
+
+
+def format_duration(seconds: float) -> str:
+    """Seconds -> H:MM:SS, so a wall time is readable next to a SLURM request."""
+    if not isinstance(seconds, (int, float)) or math.isnan(seconds):
+        return ""
+    seconds = int(round(seconds))
+    return f"{seconds // 3600}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+
+
+def write_timing(runtime_dir: Path, *, seconds: float, started: str, finished: str,
+                 frames: int | None = None) -> Path:
+    """Record one leg of wall-clock time in runtime/timing.yaml, accumulating.
+
+    Called by run.py when sim.simulate() returns. A run that was resumed from
+    its checkpoint (a job that ran out of walltime, then was resubmitted) adds
+    to `wall_seconds_total` and `legs` instead of overwriting them, so the
+    totals always describe the whole simulation. `started`/`finished` describe
+    the most recent leg only.
+    """
+    runtime_dir = Path(runtime_dir)
+    path = runtime_dir / TIMING_FILENAME
+    previous = _read_yaml(path)
+    total = float(previous.get("wall_seconds_total", 0.0) or 0.0) + float(seconds)
+    legs = int(previous.get("legs", 0) or 0) + 1
+    first_started = str(previous.get("first_started_utc") or started)
+    path.write_text(
+        "# Wall-clock cost of this run, written by run.py when simulate() returns.\n"
+        "# 'leg' = one job; a run resumed from its checkpoint has more than one.\n"
+        f"wall_seconds: {round(float(seconds), 3)}\n"
+        f"wall_seconds_total: {round(total, 3)}\n"
+        f"legs: {legs}\n"
+        f'first_started_utc: "{first_started}"\n'
+        f'started_utc: "{started}"\n'
+        f'finished_utc: "{finished}"\n' 
+        + (f"frames_at_finish: {frames}\n" if frames is not None else "")
+    )
+    return path
 
 
 def write_lattice(runtime_dir: Path, *, nx: int, ny: int, spacing: float, margin: float) -> Path:

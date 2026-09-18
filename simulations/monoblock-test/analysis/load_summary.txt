@@ -1,0 +1,3 @@
+16 chains x 720 residues/chain, box = [282.84 282.84 500.  ]
+anchored end: residue index 0 (mean z=4.8 Å); free end: residue index -1 (mean z=208.8 Å)
+periodic wrapping: 370 whole-molecule wrap events in this trajectory (anchor movement after unwrapping: 0.0001 Å — grafted anchors cannot move)

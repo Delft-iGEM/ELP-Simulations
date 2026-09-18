@@ -1,0 +1,112 @@
+# Notes
+
+## 2026-09-19 — chains "teleporting" out of the box, and what it means
+
+Question: ELPs lean out of the bounding box and get wrapped to the other side.
+Does that change their behaviour, and do lysine contacts across the edge still
+get counted?
+
+### 1. The wrap is bookkeeping, not physics
+
+CALVADOS builds every nonbonded force (Ashbaugh–Hatch LJ and the Yukawa
+electrostatics) with OpenMM's CutoffPeriodic method, and the bonds with
+periodic boundary conditions (calvados/interactions.py). For the integrator a
+chain that has drifted out on the right is exactly the same as its image coming
+in on the left: same neighbours, same distances, same grafting density. What
+the trajectory shows is only OpenMM's DCD reporter re-centring each whole
+molecule into the box when it writes a frame. The forces never see that jump.
+The number of chains per box area is fixed, so the concentration is preserved
+by construction — a wrapped chain is not "diluted" and its behaviour does not
+change.
+
+Two real caveats, neither caused by the wrapping itself:
+
+* Self-interaction across the box: if a chain's lateral extent plus the 4 nm
+  cutoff exceeds half the box side, it can interact with its own image. At
+  0.02 chains/nm² (7 nm spacing, 16 chains → 28 nm box) with 720–1040-residue
+  chains this is a real neighbour anyway (the brush is dense), but for small
+  nmol boxes keep the box side well above twice a chain's lateral size.
+* The box is periodic in z too — see 3 below. This one was actually a problem.
+
+### 2. Contact counting is correct across the edge
+
+The crosslink-contacts cell in analyze.ipynb calls
+`self_distance_array(..., box=ts.dimensions)`, which is the minimum-image
+convention on x, y and z. A lysine wrapped to the far side is measured against
+every other lysine along the shortest periodic path, so a pair in contact
+around the box edge is counted exactly like one in the middle. The live
+crosslinker during the run (`min_image_distances` in tools/crosslink.py) does
+the same, as does the post-hoc `sim crosslink`. No counts are lost when a
+chain wraps.
+
+Rules: never pass unwrapped coordinates to a distance computation, and never
+drop the `box=` argument — either one silently loses the cross-boundary
+contacts. The unwrapping in the notebook (`unwrap_in_time`) is for plotting
+traces only.
+
+### 3. The box height was NOT big enough (fixed)
+
+The wall is a one-sided potential at z = 1.9 nm, not a lid, and the box is
+periodic in z. So a bead within the 4 nm cutoff of the box top interacts with
+the periodic image of the grafted layer at the bottom. Measured on the four
+finished brush runs (50 nm box, 0.02 chains/nm², 16 chains):
+
+| run              | residues | highest bead ever | mean per-frame max | 99th pct |
+|------------------|----------|-------------------|--------------------|----------|
+| monoblock-test   |  720     | 51 nm             | 40 nm              | 36 nm    |
+| triblock-32-test |  880     | 57 nm             | 45 nm              | 41 nm    |
+| triblock-64-test | 1040     | 63 nm             | 48 nm              | 43 nm    |
+| tetrablock       | 1040     | 58 nm             | 48 nm              | 44 nm    |
+
+The tops of these brushes were interacting with the image of the surface layer
+for most of the run. Treat brush-height / top-of-brush results from those four
+runs with suspicion (contact counts between lysines are less affected, but a
+bead at z > 46 nm was also within reach of the bottom layer's image).
+
+Fix (tools/new_simulation.py `plan_box_height`): box height = 0.3 × contour
+length, rounded up to 5 nm, never below 50 nm. For these chains that is 85 nm
+(720 aa), 105 nm (880 aa) and 120 nm (1040 aa). Override with `box_height` in
+the notebook's Shared or `sim new --box-height`. A taller box is essentially
+free (neighbour list scales with beads, not volume). After every run
+metadata.csv now records z_min_nm, z_max_nm, box_headroom_nm and
+box_tall_enough, and the notebook's load cell prints the same headroom check.
+
+### 4. The finished brush runs are not equilibrated at 70 ns
+
+Chodera-style burn-in detection on the per-frame mean Rg and RMSD (the
+notebook's equilibration cell), 1010 frames of 70 ps:
+
+| run              | Rg equilibrated after | RMSD equilibrated after | N_eff (worst) |
+|------------------|-----------------------|-------------------------|---------------|
+| monoblock-test   | 55 ns                 | 12 ns                   | 15            |
+| triblock-32-test | 20 ns                 | 64 ns                   | 15            |
+| triblock-64-test | 61 ns                 | 30 ns                   | 9             |
+| tetrablock       | 43 ns                 | 63 ns                   | 10            |
+
+So 7 070 000 steps (70 ns) gives at most ~10–30 independent samples of the
+slowest observable; the notebook's own threshold for a usable average is 50.
+Plateau Rg ≈ 9.5–11.4 nm, RMSD from the start ≈ 17–21 nm. Part of the drift
+may be the box-top artefact above, part is just that 1040-residue chains at a
+7 nm spacing relax slowly. The next batch keeps 70 ns so it is comparable with
+these, but plan on extending it from the checkpoints (runs resume; the timing
+record adds a "leg") or on 3–4x longer runs for anything quantitative.
+
+Consequence for the reactive runs: `crosslink_start_step` / `surface_start_step`
+are set to 1 000 000 (10 ns) in the batch below, not 0. That is enough to clear
+the placement artefacts (the free/preattached construction stacks beads 0.38 nm
+apart on a grid, so neighbouring lysines start inside the 0.8 nm reaction
+distance; an earlier brush test, does-link-work2, had 5 of its 23 crosslinks at
+frame 0), but it is not "past equilibration" in the Rg/RMSD sense. Bonds formed
+between 10 ns and full equilibration are encounters the dynamics produced,
+just in a brush that was still relaxing.
+
+### 5. Batch submitted today: block-runs.csv
+
+monoblock / triblock-32 / triblock-64 / tetrablock, each as
+brush + K–K crosslinking (mode 1, was missing), free ± crosslinking (mode 2)
+and preattached ± crosslinking (mode 3). 20 runs, 0.02 chains/nm², 16 chains,
+7 070 000 steps, crosslink distance 0.8 nm p = 1.0 where on, preattached
+fraction 0.4 (same as Example-csv.csv; minimum would be 16/256 = 0.0625),
+walltime 2:00:00 (the plain brush runs took 12–14 min; the reactive loop with
+checks every 1000 steps is slower). Box heights 85 / 105 / 120 nm from the new
+rule. Reaction and surface-binding start step 1 000 000 (see 4).

@@ -59,6 +59,13 @@ What the numbers mean, and what they don't
 Units are nanometres throughout, matching OpenMM and the box-planning code —
 *not* the angstroms an MDAnalysis-based post-hoc script works in. The startup
 line prints both so the two cannot be confused.
+
+Surface attachment through lysines (``tools.surface``, the ``free`` and
+``preattached`` modes) runs in the same loop (`run_reactive`) and writes to the
+same event record: rows with ``kind = surface`` are lysine-surface bonds, and
+the ``origin`` column separates bonds present at initialisation from ones formed
+during the run. A lysine is in exactly one of three states — free, bonded to the
+surface, or bonded to another lysine — so the two reactors mask each other out.
 """
 
 from __future__ import annotations
@@ -97,9 +104,14 @@ RAMP_UPDATES = 5
 # module docstring.
 PAIR_WARN_SITES = 500
 
+# `kind` is intra / inter for lysine-lysine bonds and surface for a
+# lysine-surface bond (then resid_j, chain_j, span and pymol_j are blank and
+# x, y, z is the pin). `origin` is "initial" for a bond the run started with
+# and "run" for one it formed. Consumers that read by column name are
+# unaffected by the extra column; a movie script should skip pymol_j when blank.
 CSV_COLUMNS = [
     "frame", "time_ps", "resid_i", "chain_i", "resid_j", "chain_j",
-    "kind", "span", "x", "y", "z", "pymol_i", "pymol_j",
+    "kind", "span", "x", "y", "z", "pymol_i", "pymol_j", "origin",
 ]
 
 
@@ -221,7 +233,7 @@ def all_sites(topology) -> list[SiteInfo]:
 
 
 def find_sites(topology, selection: tuple[int, ...] | None = None,
-               verbose: bool = True) -> list[SiteInfo]:
+               verbose: bool = True, drop_anchor: bool = True) -> list[SiteInfo]:
     """The reactive beads: lysines by default, or exactly `selection` if given.
 
     Auto-detection tries residue name LYS, then residue name K, then bead name K,
@@ -230,10 +242,12 @@ def find_sites(topology, selection: tuple[int, ...] | None = None,
     something arbitrary — silently crosslinking the wrong beads is worse than
     not starting.
 
-    Residue 0 of every chain is dropped whatever the rule says. That bead is the
-    surface anchor: `sim new` tags it "Z", CALVADOS gives it zero effective mass
-    and OpenMM holds it fixed, so bonding to it would tether a chain to an
-    immovable point rather than to another chain.
+    In brush mode (`drop_anchor=True`, the default) residue 0 of every chain is
+    dropped whatever the rule says. That bead is the surface anchor: `sim new`
+    tags it "Z", CALVADOS gives it zero effective mass and OpenMM holds it fixed,
+    so bonding to it would tether a chain to an immovable point rather than to
+    another chain. In the free/preattached modes residue 0 is an ordinary
+    residue and is kept (`drop_anchor=False`).
     """
     records = all_sites(topology)
 
@@ -271,8 +285,8 @@ def find_sites(topology, selection: tuple[int, ...] | None = None,
                 "something else."
             )
 
-    anchors = [r for r in chosen if r.res_in_chain == 0]
-    sites = [r for r in chosen if r.res_in_chain != 0]
+    anchors = [r for r in chosen if r.res_in_chain == 0] if drop_anchor else []
+    sites = [r for r in chosen if r.res_in_chain != 0] if drop_anchor else list(chosen)
 
     if verbose:
         print(f"crosslinking: {len(sites)} reactive sites, matched by {rule}")
@@ -417,7 +431,7 @@ class Crosslinker:
             del self.ramping[b]
         return True
 
-    def check_reactions(self, context, step: int) -> bool:
+    def check_reactions(self, context, step: int, blocked: np.ndarray | None = None) -> bool:
         """React every pair within the cutoff, reading positions from a live Context."""
         from openmm.unit import nanometer
 
@@ -426,18 +440,22 @@ class Crosslinker:
         state = context.getState(getPositions=True, enforcePeriodicBox=False)
         pos = state.getPositions(asNumpy=True).value_in_unit(nanometer)
         box = state.getPeriodicBoxVectors(asNumpy=True).value_in_unit(nanometer)
-        return self.react(pos, np.diag(np.asarray(box)), step)   # orthorhombic box
+        return self.react(pos, np.diag(np.asarray(box)), step, blocked)   # orthorhombic box
 
-    def react(self, pos: np.ndarray, box_lengths: np.ndarray, step: int) -> bool:
+    def react(self, pos: np.ndarray, box_lengths: np.ndarray, step: int,
+              blocked: np.ndarray | None = None) -> bool:
         """React every pair that is within the cutoff, closest pairs first.
 
         Pure geometry, so the identical rule can be replayed over the frames of a
         finished trajectory (`post_hoc_events`) and compared against what the
-        reactive run actually did.
+        reactive run actually did. `blocked` marks sites (by slot) that are
+        bonded to the surface and so can never crosslink.
         """
         settings = self.settings
 
         spare = self.used < settings.valence
+        if blocked is not None:
+            spare = spare & ~np.asarray(blocked, dtype=bool)
         live = (~self.reacted) & spare[self.pair_slot_a] & spare[self.pair_slot_b]
         candidates = np.flatnonzero(live)
         if candidates.size == 0:
@@ -579,6 +597,8 @@ class Crosslinker:
                 # PyMOL's `index` selector is 1-based; OpenMM and MDAnalysis are 0-based.
                 "pymol_i": a.index + 1,
                 "pymol_j": b.index + 1,
+                # Lysine-lysine bonds are only ever formed during the run.
+                "origin": "run",
             })
         return rows
 
@@ -658,16 +678,16 @@ class Crosslinker:
         self.write_summary(runtime_dir, n_save, steps_done)
 
 
-def _chunk_sizes(remaining: int, settings: CrosslinkSettings, ramping: bool) -> int:
+def _chunk_sizes(remaining: int, check_every: int, ramp_steps: int, ramping: bool) -> int:
     """How far to step before stopping to update bond parameters.
 
     Normally one check interval. While a bond is mid-ramp, smaller steps, so the
     ramp is resolved over several parameter updates instead of jumping to full
     stiffness at the next check (see RAMP_UPDATES).
     """
-    chunk = settings.check_every
-    if ramping and settings.ramp_steps > 0:
-        chunk = min(chunk, max(1, settings.ramp_steps // RAMP_UPDATES))
+    chunk = check_every
+    if ramping and ramp_steps > 0:
+        chunk = min(chunk, max(1, ramp_steps // RAMP_UPDATES))
     return min(chunk, remaining)
 
 
@@ -685,14 +705,53 @@ def _reaction_seed(settings: CrosslinkSettings, sim) -> int:
     return int(np.random.SeedSequence().entropy % (2 ** 63))
 
 
-def run_reactive(sim, settings: CrosslinkSettings, runtime_dir: Path | None = None) -> "Crosslinker":
-    """Run `sim` with reactive crosslinking. Mirrors calvados Sim.simulate().
+def write_event_record(runtime_dir: Path, n_save: int, steps_done: int,
+                       xl: "Crosslinker | None", sb=None, n_chains: int | None = None) -> None:
+    """crosslink_events.csv and crosslink_summary.txt for whichever reactors ran.
+
+    One record for both: surface rows (kind = surface) and lysine-lysine rows
+    share the schema; bonds present at t = 0 come first, the rest in step order.
+    """
+    runtime_dir = Path(runtime_dir)
+    rows: list[dict[str, Any]] = []
+    if sb is not None:
+        rows += sb.event_rows(n_save)
+    if xl is not None:
+        rows += xl.event_rows(n_save)
+    rows.sort(key=lambda r: (r["origin"] != "initial", float(r["time_ps"])))
+    with open(runtime_dir / EVENTS_FILENAME, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    lines: list[str] = []
+    if xl is not None:
+        lines += xl.summary_lines(n_save, steps_done)
+    else:
+        lines += [f"crosslink summary — written "
+                  f"{datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+                  "", f"steps simulated:       {steps_done}",
+                  "lysine-lysine crosslinking: off (crosslink_distance = None)"]
+    if sb is not None:
+        lines += ["", *sb.summary_lines(n_chains if n_chains is not None else 0)]
+    (runtime_dir / SUMMARY_FILENAME).write_text("\n".join(lines) + "\n")
+
+
+def run_reactive(sim, settings: CrosslinkSettings | None, runtime_dir: Path | None = None,
+                 surface=None) -> "Crosslinker | None":
+    """Run `sim` with reactive crosslinking and/or surface attachment. Mirrors
+    calvados Sim.simulate().
 
     Same integrator, platform, reporters, checkpointing and final PDBs as the
     stock path — the only difference is that stepping is broken into chunks so
     bond parameters can be updated between them. Chunking does not change the
     dynamics (stepping 500 + 500 is stepping 1000) and reporters fire on the
     simulation's own step counter, so the trajectory is unaffected by it.
+
+    `settings` is the lysine-lysine crosslinking (None = off); `surface` is a
+    tools.surface.SurfaceSettings for the free/preattached modes (None = brush).
+    With `surface=None` this is exactly the loop it was before surface modes
+    existed. At least one of the two must be given.
 
     Only the configuration `sim new` actually generates is supported; the
     equilibration and clock-time modes are refused rather than half-replicated.
@@ -702,6 +761,9 @@ def run_reactive(sim, settings: CrosslinkSettings, runtime_dir: Path | None = No
     import openmm
     from openmm import app, unit
     from tqdm import tqdm
+
+    if settings is None and surface is None:
+        raise ValueError("run_reactive needs crosslink settings, surface settings or both.")
 
     path = str(sim.path)
     runtime_dir = Path(runtime_dir) if runtime_dir is not None else Path(path)
@@ -718,10 +780,33 @@ def run_reactive(sim, settings: CrosslinkSettings, runtime_dir: Path | None = No
             f"(config runtime = {sim.runtime} h). Set runtime: 0 and use steps."
         )
 
-    print(settings.banner(), flush=True)
-    sites = find_sites(sim.top, settings.selection)
-    seed = _reaction_seed(settings, sim)
-    xl = Crosslinker(settings, sites, seed)
+    brush = surface is None
+    n_chains = int(sim.top.n_chains)
+
+    xl = None
+    if settings is not None:
+        print(settings.banner(), flush=True)
+        sites = find_sites(sim.top, settings.selection, drop_anchor=brush)
+        seed = _reaction_seed(settings, sim)
+        xl = Crosslinker(settings, sites, seed)
+
+    sb = None
+    if surface is not None:
+        from tools.surface import STATE_FILENAME as SURFACE_STATE, SurfaceBinder
+
+        print(surface.banner(), flush=True)
+        # The two reactors share one site list (all lysines, residue 0 included)
+        # so that "this lysine is bonded to the surface" and "this lysine is
+        # crosslinked" index the same slots and can exclude each other.
+        surface_sites = find_sites(sim.top, None, verbose=xl is None, drop_anchor=False)
+        if xl is not None and settings.selection is None and \
+                [s.index for s in xl.sites] != [s.index for s in surface_sites]:
+            raise ValueError("the crosslink and surface site lists differ; this should not happen "
+                             "when crosslink_selection is None.")
+        if xl is not None and settings.selection is not None:
+            raise NotImplementedError("crosslink_selection is not supported together with a "
+                                      "surface mode: both reactors need the same lysine list.")
+        sb = SurfaceBinder(surface, surface_sites, int(surface.seed))
 
     fcheck_in = f"{path}/{sim.frestart}"
     fcheck_out = f"{path}/restart.chk"
@@ -732,29 +817,59 @@ def run_reactive(sim, settings: CrosslinkSettings, runtime_dir: Path | None = No
         # Restoring a network is the whole reason crosslink_state.json exists: a
         # restart that rebuilt every bond dormant would silently make a
         # different network from the one the run had already formed.
-        saved_at = xl.load_state(runtime_dir)
-        if saved_at is None:
-            raise FileNotFoundError(
-                f"Restarting from {fcheck_in} but no {STATE_FILENAME} was found next to it. "
-                f"The crosslinks formed before the checkpoint would be lost and the run would "
-                f"continue with a different network. Delete the checkpoint to start over, or "
-                f"restore the state file."
-            )
-        print(f"crosslinking: resuming with {int(xl.reacted.sum())} bonds already formed "
-              f"(state saved at step {saved_at})")
+        if xl is not None:
+            saved_at = xl.load_state(runtime_dir)
+            if saved_at is None:
+                raise FileNotFoundError(
+                    f"Restarting from {fcheck_in} but no {STATE_FILENAME} was found next to it. "
+                    f"The crosslinks formed before the checkpoint would be lost and the run would "
+                    f"continue with a different network. Delete the checkpoint to start over, or "
+                    f"restore the state file."
+                )
+            print(f"crosslinking: resuming with {int(xl.reacted.sum())} bonds already formed "
+                  f"(state saved at step {saved_at})")
+        if sb is not None:
+            saved_at = sb.load_state(runtime_dir)
+            if saved_at is None:
+                raise FileNotFoundError(
+                    f"Restarting from {fcheck_in} but no {SURFACE_STATE} was found next to it. "
+                    f"The surface bonds would be forgotten and the chains would float away. "
+                    f"Delete the checkpoint to start over, or restore the state file."
+                )
+            print(f"surface: resuming with {sb.n_pinned} lysines bonded to the surface "
+                  f"(state saved at step {saved_at})")
     else:
         # A stale state file from a previous attempt must not resurrect bonds
         # into a run that is starting from scratch.
-        stale = runtime_dir / STATE_FILENAME
-        if stale.is_file():
-            print(f"crosslinking: ignoring stale {STATE_FILENAME} (not restarting from a checkpoint)")
-            stale.unlink()
+        if xl is not None:
+            stale = runtime_dir / STATE_FILENAME
+            if stale.is_file():
+                print(f"crosslinking: ignoring stale {STATE_FILENAME} (not restarting from a checkpoint)")
+                stale.unlink()
+        if sb is not None:
+            stale = runtime_dir / SURFACE_STATE
+            if stale.is_file():
+                print(f"surface: ignoring stale {SURFACE_STATE} (not restarting from a checkpoint)")
+                stale.unlink()
+            plan = getattr(sim, "surface_plan", None)
+            if plan is None:
+                raise RuntimeError("no initial surface plan on the Sim object — prepare.py's "
+                                   "build_sim must call tools.surface.place_chains for "
+                                   "free/preattached modes.")
+            sb.apply_plan(plan, n_chains)
 
-    xl.add_force(sim.system)
-    print(f"crosslinking: {xl.n_pairs} dormant bonds added, checks every "
-          f"{settings.check_every} steps ({settings.check_every * DT_PS:.1f} ps)"
-          + (f", ignored before step {settings.start_step}" if settings.start_step else ""),
-          flush=True)
+    if xl is not None:
+        xl.add_force(sim.system)
+        print(f"crosslinking: {xl.n_pairs} dormant bonds added, checks every "
+              f"{settings.check_every} steps ({settings.check_every * DT_PS:.1f} ps)"
+              + (f", ignored before step {settings.start_step}" if settings.start_step else ""),
+              flush=True)
+    if sb is not None:
+        sb.add_force(sim.system)
+        print(f"surface: {sb.n_sites} tethers added ({sb.n_pinned} active), cap {sb.n_max} lysines, "
+              f"checks every {surface.check_every} steps ({surface.check_every * DT_PS:.1f} ps)"
+              + (f", ignored before step {surface.start_step}" if surface.start_step else ""),
+              flush=True)
 
     # ---- everything below mirrors calvados.sim.Sim.simulate() --------------
     if sim.restart == "pdb" and os.path.isfile(fcheck_in):
@@ -800,8 +915,12 @@ def run_reactive(sim, settings: CrosslinkSettings, runtime_dir: Path | None = No
             os.rename(f"{path}/{sim.sysname:s}.dcd", f"{path}/backup_{sim.sysname:s}_{stamp}.dcd")
         print(f"Writing trajectory to new file {path}/{sim.sysname:s}.dcd")
         simulation.context.setPositions(pdb.positions)
+        if sb is not None:
+            _report_start(simulation, sb, "before minimisation")
         print("Minimizing energy.")
         simulation.minimizeEnergy()
+        if sb is not None:
+            _report_start(simulation, sb, "after minimisation", check=True)
 
     simulation.reporters.append(
         app.dcdreporter.DCDReporter(f"{path}/{sim.sysname:s}.dcd", sim.wfreq, append=append))
@@ -815,52 +934,112 @@ def run_reactive(sim, settings: CrosslinkSettings, runtime_dir: Path | None = No
     n_save = int(sim.wfreq)
     checkpoint_every = max(1, total // 10)   # same cadence as the stock path
     next_checkpoint = checkpoint_every
-    next_check = simulation.currentStep + settings.check_every
+    # Each reactor keeps its own check cadence; the loop stops at the sooner.
+    check_every = min(r.settings.check_every for r in (xl, sb) if r is not None)
+    ramp_steps = min(r.settings.ramp_steps for r in (xl, sb) if r is not None)
+    next_check_xl = simulation.currentStep + settings.check_every if xl is not None else None
+    next_check_sb = simulation.currentStep + surface.check_every if sb is not None else None
+
+    def save_all(step: int, done: int) -> None:
+        simulation.saveCheckpoint(fcheck_out)
+        # State first, outputs after: the checkpoint and the network it
+        # belongs to have to land together.
+        if xl is not None:
+            xl.save_state(runtime_dir, step)
+        if sb is not None:
+            sb.save_state(runtime_dir, step)
+        write_event_record(runtime_dir, n_save, done, xl, sb, n_chains)
 
     print("STARTING SIMULATION", flush=True)
     done = 0
     with tqdm(total=total, mininterval=1) as bar:
         while done < total:
-            chunk = _chunk_sizes(total - done, settings, bool(xl.ramping))
+            ramping = bool(xl is not None and xl.ramping) or bool(sb is not None and sb.ramping)
+            chunk = _chunk_sizes(total - done, check_every, ramp_steps, ramping)
             chunk = max(1, min(chunk, next_checkpoint - done))
             simulation.step(chunk)
             done += chunk
             step = simulation.currentStep
 
-            changed = xl.advance_ramps(step)
-            if step >= next_check and step >= settings.start_step:
-                changed |= xl.check_reactions(simulation.context, step)
-                next_check = step + settings.check_every
-            if changed:
-                xl.force.updateParametersInContext(simulation.context)
+            if sb is not None:
+                changed = sb.advance_ramps(step)
+                if step >= next_check_sb and step >= surface.start_step:
+                    # Surface first: a lysine that binds the surface this check
+                    # is not available to crosslink in the same check.
+                    changed |= sb.check_reactions(simulation.context, step,
+                                                  blocked=(xl.used > 0) if xl is not None else None)
+                    next_check_sb = step + surface.check_every
+                if changed:
+                    sb.force.updateParametersInContext(simulation.context)
+
+            if xl is not None:
+                changed = xl.advance_ramps(step)
+                if step >= next_check_xl and step >= settings.start_step:
+                    changed |= xl.check_reactions(simulation.context, step,
+                                                  blocked=sb.pinned if sb is not None else None)
+                    next_check_xl = step + settings.check_every
+                if changed:
+                    xl.force.updateParametersInContext(simulation.context)
 
             if done >= next_checkpoint or done >= total:
-                simulation.saveCheckpoint(fcheck_out)
-                # State first, outputs after: the checkpoint and the network it
-                # belongs to have to land together.
-                xl.save_state(runtime_dir, step)
-                xl.write_outputs(runtime_dir, n_save, done)
+                save_all(step, done)
                 next_checkpoint = done + checkpoint_every
             bar.update(chunk)
 
-    simulation.saveCheckpoint(fcheck_out)
-    xl.save_state(runtime_dir, simulation.currentStep)
-    xl.write_outputs(runtime_dir, n_save, done)
+    save_all(simulation.currentStep, done)
 
     stamp = datetime.now().strftime("%Y%d%m_%Hh%Mm%Ss")
     state_final = simulation.context.getState(getPositions=True, enforcePeriodicBox=True)
     app.pdbreporter.PDBReporter(f"{path}/{sim.sysname}_{stamp}.pdb", 0).report(simulation, state_final)
     app.pdbreporter.PDBReporter(f"{path}/checkpoint.pdb", 0).report(simulation, state_final)
 
-    n = len(xl.events)
-    intra = sum(1 for r in xl.event_rows(n_save) if r["kind"] == "intra")
-    print(f"crosslinking: {n} crosslinks formed ({intra} intra, {n - intra} inter); "
-          f"see {EVENTS_FILENAME} and {SUMMARY_FILENAME}", flush=True)
-    return xl
+    if xl is not None:
+        n = len(xl.events)
+        intra = sum(1 for r in xl.event_rows(n_save) if r["kind"] == "intra")
+        print(f"crosslinking: {n} crosslinks formed ({intra} intra, {n - intra} inter); "
+              f"see {EVENTS_FILENAME} and {SUMMARY_FILENAME}", flush=True)
+    if sb is not None:
+        counts = sb.per_chain_counts(n_chains)
+        print(f"surface: {sb.n_pinned} of {sb.n_sites} lysines bonded to the surface "
+              f"({sb.n_pinned / sb.n_sites:.3f}); per chain min {int(counts.min())} / "
+              f"max {int(counts.max())}"
+              + (f"; cap reached at step {sb.cap_reached_step}" if sb.cap_reached_step is not None
+                 else "; cap not reached")
+              + f"; see {EVENTS_FILENAME} and {SUMMARY_FILENAME}", flush=True)
+    return xl if xl is not None else sb
+
+
+def _report_start(simulation, sb, label: str, check: bool = False) -> None:
+    """Potential energy and pin placement at the start, so a bad construction is
+    seen here rather than as a NaN a thousand steps in."""
+    from openmm.unit import kilojoule_per_mole, nanometer
+
+    from tools.surface import FORCE_GROUP
+
+    state = simulation.context.getState(getEnergy=True, getPositions=True)
+    total = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+    tether = simulation.context.getState(getEnergy=True, groups={FORCE_GROUP}) \
+        .getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+    pos = state.getPositions(asNumpy=True).value_in_unit(nanometer)
+    pinned = np.flatnonzero(sb.pinned)
+    off = np.linalg.norm(pos[sb.site_beads[pinned]] - sb.pin_xyz[pinned], axis=1) if len(pinned) else np.zeros(0)
+    lowest = float(pos[:, 2].min())
+    print(f"surface: potential energy {label}: {total:,.1f} kJ/mol total, "
+          f"{tether:,.2f} kJ/mol in the {len(pinned)} surface tethers; pinned lysines at most "
+          f"{off.max() if len(off) else 0.0:.4f} nm off their pins; lowest bead z = {lowest:.3f} nm "
+          f"({lowest * 10:.1f} A)", flush=True)
+    if not np.isfinite(total):
+        raise RuntimeError(f"potential energy is not finite {label} — the initial configuration "
+                           "is broken; not stepping.")
+    if check and len(off) and off.max() > 0.5:
+        raise RuntimeError(f"a pinned lysine ended {off.max():.3f} nm off its pin {label}; the "
+                           "construction is being pulled apart — not stepping.")
 
 
 def post_hoc_events(traj_path: Path, top_path: Path, settings: CrosslinkSettings,
-                    n_save: int, seed: int = 0, verbose: bool = True) -> "Crosslinker":
+                    n_save: int, seed: int = 0, verbose: bool = True,
+                    drop_anchor: bool = True,
+                    surface_rows: list[dict[str, Any]] | None = None) -> "Crosslinker":
     """Apply the same reaction rule to a *finished* trajectory, frame by frame.
 
     This is the comparison the reactive mode exists to make. It is the
@@ -880,23 +1059,40 @@ def post_hoc_events(traj_path: Path, top_path: Path, settings: CrosslinkSettings
     post-hoc pass samples the encounter history more coarsely, which cuts the
     other way — it can miss brief encounters. Compare like with like where you
     can (`crosslink_check_every` = `wfreq`) and say which you used.
+
+    `drop_anchor` is False for a free/preattached run, where residue 0 is an
+    ordinary residue. `surface_rows` — the run's own surface-bond events, if it
+    had any — keep a lysine that is bonded to the surface out of the pair pool
+    from the step it bound, exactly as the live run did.
     """
     import mdtraj as md
 
     traj = md.load(str(traj_path), top=str(top_path))
-    sites = find_sites(traj.topology, settings.selection, verbose=verbose)
+    sites = find_sites(traj.topology, settings.selection, verbose=verbose, drop_anchor=drop_anchor)
     xl = Crosslinker(settings, sites, seed)     # force stays None: nothing to ramp
 
     if traj.unitcell_lengths is None:
         raise ValueError(f"{traj_path} has no box information, so the minimum image convention "
                          "cannot be applied.")
 
+    # step at which each site became surface-bonded (inf = never)
+    bound_at = np.full(len(sites), np.inf)
+    if surface_rows:
+        by_key = {(s.chain, s.resid): i for i, s in enumerate(sites)}
+        for row in surface_rows:
+            if row.get("kind") != "surface":
+                continue
+            slot = by_key.get((int(row["chain_i"]), int(row["resid_i"])))
+            if slot is not None:
+                bound_at[slot] = min(bound_at[slot], float(row["time_ps"]) / DT_PS)
+
     for frame in range(traj.n_frames):
         step = frame * n_save
         if step < settings.start_step:
             continue
         xl.react(np.asarray(traj.xyz[frame], dtype=np.float64),
-                 np.asarray(traj.unitcell_lengths[frame], dtype=np.float64), step)
+                 np.asarray(traj.unitcell_lengths[frame], dtype=np.float64), step,
+                 blocked=(bound_at <= step) if surface_rows else None)
     if verbose:
         rows = xl.event_rows(n_save)
         intra = sum(1 for r in rows if r["kind"] == "intra")

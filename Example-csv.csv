@@ -1,0 +1,7 @@
+Name ;Sequence;concentration;nmolecules;steps;crosslink distance;crosslink prob;mode;preattached fraction;walltime
+example-v20-dilute;V20;0.02;16;7070000;;;;;0:40:00
+example-v20-dense;V20;0.08;16;7070000;;;brush;;0:40:00
+example-block-xl;(GAGAGAGA) K1 V3 (VPGFG) V4 K1 V3 (VPGFG) V4;0.02;25;7070000;0.8;1.0;;;2:00:00
+example-k4-free;K1 V4 K1 V4 K1 V4 K1 V4;0.02;16;7070000;;;free;;1:00:00
+example-k4-pre;K1 V4 K1 V4 K1 V4 K1 V4;0.02;16;7070000;0.8;1.0;preattached;0.4;1:00:00
+example-raw-seq;VPGVGVPGVGVPGVGVPGVGVPGVGVPGVG;;;;;;;;

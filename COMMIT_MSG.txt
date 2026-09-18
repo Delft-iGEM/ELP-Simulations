@@ -1,0 +1,57 @@
+Batch runs from a CSV, lysine surface attachment, per-run box height, run timing
+
+Planning and submitting
+- analyze.ipynb: the setup section now plans a whole CSV of runs at once
+  (one row per simulation, blank cells fall back to a Shared block), prints
+  a comparison table + per-run stats and lattice plots, checks every name
+  against simulations/ and used-runs.csv before anything is queued, submits
+  them all, and can smoke-test one row locally on CPU/CUDA.
+- tools/run_batch.py (new): CSV -> RunSpec/RunPlan, ELP shorthand or raw
+  sequences, per-row walltime/mode/crosslinking, the used-runs.csv registry
+  (check_names / record_runs / backfill) and the summary printers.
+- tools/cli.py: `sim used` (--backfill) shows the registry; `sim submit`
+  records to it; `sim crosslink` handles free/preattached runs.
+- Example-csv.csv, used-runs.csv (backfilled from simulations/),
+  block-runs.csv: monoblock / triblock-32 / triblock-64 / tetrablock in
+  brush+XL, free +/- XL and preattached +/- XL (20 runs, submitted as SLURM jobs 265624-265643 with
+  reaction/surface start step 1,000,000).
+
+Attaching chains through lysines (modes free / preattached)
+- tools/surface.py (new): chains hang from lysines tethered to a plane
+  above the wall instead of a fixed residue-0 anchor. `free` starts with one
+  random lysine per chain bonded and binds more during the run; `preattached`
+  pins a random fraction at t=0. Hairpin-stack initial construction with a
+  geometry check, energy report before/after minimisation, per-run seed.
+- tools/crosslink.py: shares the site list and event record with the
+  surface binder (kind = surface rows, new `origin` column), masks
+  surface-bonded lysines out of the K-K pair pool, drop_anchor only in brush
+  mode, post-hoc detection replays surface bonds.
+- tools/new_simulation.py, template/run.py: --mode and the surface_*
+  settings; surface.yaml is the opt-in, so brush mode is the same code path
+  as before.
+
+Box height (was too small)
+- The box is periodic in z and the wall is not a lid: beads within the 4 nm
+  cutoff of the top feel the periodic image of the grafted layer. The
+  720-1040-residue blocks reached 51-63 nm in the fixed 50 nm box.
+- plan_box_height: default 0.3 x contour length (rounded up to 5 nm, min
+  50 nm); `box_height` in Shared / `--box-height` overrides. BoxPlan carries
+  l_box_z; the notebook load cell prints the headroom and warns.
+- tools/metadata.py records z_min_nm, z_max_nm, box_headroom_nm,
+  box_tall_enough after each run.
+
+Run timing and metadata
+- template/run.py times sim.simulate() and writes timing.yaml (legs add up
+  across checkpoint restarts); metadata.csv gains run_wall_seconds,
+  ns_per_hour, walltime_requested and the surface-bond statistics.
+
+Docs and notes
+- README: batch CSV workflow, used-runs registry, surface modes, box height.
+- notes_titus: why x/y wrapping is bookkeeping not physics, why minimum-image
+  contact counts are unaffected, the box-height measurements, and that the
+  four 70 ns brush runs are not equilibrated by the Rg/RMSD criterion.
+- simulations/*/analysis/: notebook outputs for the five finished runs.
+- work.sh: tmux session (conda-forge tmux) that keeps Claude Code running
+  after the SSH connection closes; README explains it.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

@@ -33,6 +33,11 @@ Or non-interactively:
     # opt in to reactive crosslinking: lysine pairs within 0.8 nm bond during the
     # run (off by default; see tools/crosslink.py for the caveats)
     uv run sim new ... --crosslink-distance 0.8 --crosslink-start-step 1000000
+
+    # attach chains through their lysines instead of a fixed residue-0 anchor
+    # (default "brush"; see tools/surface.py for what the two modes mean)
+    uv run sim new ... --mode free --surface-distance 0.8 --surface-tether 0.6
+    uv run sim new ... --mode preattached --surface-preattached-fraction 0.3
 """
 
 from __future__ import annotations
@@ -47,11 +52,29 @@ from typing import Annotated, NamedTuple
 import typer
 
 from tools.crosslink import CrosslinkSettings
+from tools.surface import MODES, SurfaceSettings, check_capacity
 
 app = typer.Typer(add_completion=False, no_args_is_help=False)
 
 # Fixed physical constants shared with the existing surface-attached templates.
-Z_HEIGHT = 50.0  # nm, box height
+Z_HEIGHT = 50.0  # nm, the *minimum* box height (see plan_box_height)
+
+# The box is periodic in z as well as x and y — CALVADOS builds every nonbonded
+# force with the periodic cutoff method, and the wall is a one-sided potential
+# at low z, not a lid. So a bead that gets within the electrostatics cutoff
+# (cutoff_yu, 4 nm) of the box top interacts with the periodic image of the
+# grafted layer at the bottom: it is next to the surface again. The box has to
+# be taller than the brush ever reaches, plus that cutoff. 50 nm was not: the
+# 720-1040-residue block ELPs at 0.02 chains/nm^2 reached 51-63 nm. Measured
+# on those runs the highest bead sat at 0.16-0.19 x the contour length, so the
+# default height is this fraction of the contour, never below Z_HEIGHT.
+# A taller box costs nothing to speak of — the neighbour list scales with the
+# beads, not the empty volume above them — so err on the tall side.
+# metadata.csv records z_max_nm / box_headroom_nm after every run: if the
+# headroom is under the cutoff, the run touched its own image and the box
+# must be raised (box_height in the notebook's Shared, --box-height in sim new).
+BOX_HEIGHT_FRACTION = 0.3  # of the contour length
+BOX_HEIGHT_STEP = 5.0  # nm — heights are rounded up to a multiple of this
 Z_WALL = 1.9  # nm, depth of the surface-attachment potential well
 
 # OpenMM requires the nonbonded cutoff to be less than half the box size.
@@ -190,6 +213,24 @@ def chain_length_nm(n_residues: int, measure: str = "contour") -> float:
     )
 
 
+def plan_box_height(n_residues: int, box_height: float | None = None) -> float:
+    """Box height in nm: `box_height` if given, else the default rule.
+
+    Default = BOX_HEIGHT_FRACTION x the contour length, rounded up to a
+    multiple of BOX_HEIGHT_STEP and never below Z_HEIGHT — see the comment at
+    those constants for where the numbers come from. An explicit height is
+    taken as is (still checked against the cutoff floor).
+    """
+    if box_height is None:
+        wanted = BOX_HEIGHT_FRACTION * chain_length_nm(n_residues, "contour")
+        box_height = max(Z_HEIGHT, math.ceil(wanted / BOX_HEIGHT_STEP) * BOX_HEIGHT_STEP)
+    if box_height < MIN_BOX_L:
+        raise typer.BadParameter(
+            f"box_height = {box_height} nm is below {MIN_BOX_L} nm: OpenMM needs the "
+            f"nonbonded cutoff under half the box on every axis, z included.")
+    return float(box_height)
+
+
 class BoxPlan(NamedTuple):
     l_box_x: float
     l_box_y: float
@@ -225,6 +266,9 @@ class BoxPlan(NamedTuple):
     # values above whenever margin > 0.
     box_concentration: float
     box_mass_concentration: float
+    # Box height (z), from plan_box_height — the default scales with the chain
+    # so the brush never reaches the top of the box (which is periodic too).
+    l_box_z: float
 
 
 def plan_lattice(nmol: int) -> tuple[int, int]:
@@ -288,6 +332,7 @@ def plan_box(
     length_measure: str = "contour",
     mass_concentration: float | None = None,
     margin_fraction: float = DEFAULT_MARGIN_FRACTION,
+    box_height: float | None = None,
 ) -> BoxPlan:
     """Periodic box + grafting lattice for `nmol` chains.
 
@@ -433,6 +478,7 @@ def plan_box(
         margin_fraction,
         box_concentration,
         mass_per_area(chain_mass, spacing) * box_concentration / achieved_concentration,
+        plan_box_height(n_residues, box_height),
     )
 
 
@@ -475,6 +521,7 @@ import mdtraj as md
 from tools.paths import ensure_runtime_dir
 from tools.metadata import write_lattice, write_metadata
 from tools.crosslink import CrosslinkSettings, write_settings
+from tools.surface import SurfaceSettings, place_chains, write_settings as write_surface_settings
 
 # Grafting lattice: __NX__ x __NY__ points, one chain per spacing x spacing
 # cell, with an empty `margin` rim between the outermost points and the box
@@ -495,9 +542,29 @@ margin = __MARGIN__
 # __CROSSLINK_NOTE__
 crosslink = __CROSSLINK__
 
+# How the chains are attached to the surface. "brush" (the default, and the
+# pipeline as it always was): residue 0 of every chain is tagged "Z" and pinned
+# to its lattice point. "free" / "preattached": residue 0 is an ordinary
+# residue and each chain hangs from lysines bonded to the surface instead —
+# the dict below holds those settings, and tools/surface.py says what they
+# mean and what the results can and cannot be trusted for.
+# __MODE_NOTE__
+mode = "__MODE__"
+surface = __SURFACE__
+
 
 def build_sim(sim: Sim):
      components = sim.components
+
+     if surface is not None:
+          # free / preattached: every chain stands on its pinned lysine(s).
+          # tools.surface builds the starting conformations on the same lattice
+          # cells as below, verifies them, and leaves the pin plan on `sim` for
+          # run.py's reaction loop.
+          place_chains(sim, SurfaceSettings.from_dict(surface),
+                       nx=nx, ny=ny, spacing=spacing, margin=margin)
+          md.Trajectory(sim.pos, sim.top, 0, sim.box, [90,90,90]).save(sim.pdb_cg)
+          return
 
      # Each chain goes at the *centre* of its own cell (the +0.5), offset by the
      # margin — exactly what tools.new_simulation.lattice_positions previews.
@@ -550,7 +617,10 @@ z_wall = __Z_WALL__
 sequences: dict[str, str] = {
      "__SEQ_NAME__": "__SEQUENCE__"
 }
-sequences["__SEQ_NAME__"] = f"Z{sequences['__SEQ_NAME__'][1:]}"
+if mode == "brush":
+     # Residue 0 becomes the "Z" anchor bead (zero mass, held fixed by OpenMM).
+     # In the lysine-attached modes it stays the residue the sequence says.
+     sequences["__SEQ_NAME__"] = f"Z{sequences['__SEQ_NAME__'][1:]}"
 
 
 if __name__ == "__main__":
@@ -629,6 +699,10 @@ if __name__ == "__main__":
      write_settings(runtime_dir,
                     CrosslinkSettings.from_dict(crosslink) if crosslink else None)
 
+     # Same for surface.yaml: its absence is what makes a run brush mode.
+     write_surface_settings(runtime_dir,
+                            SurfaceSettings.from_dict(surface) if surface else None)
+
      # Settings snapshot next to the trajectory-to-be. run.py rewrites it when
      # the run finishes (status/frame count); `sim metadata` refreshes it any time.
      write_metadata(runtime_dir)
@@ -650,6 +724,7 @@ def create_simulation(
     length_measure: str = "contour",
     mass_concentration: float | None = None,
     margin_fraction: float = DEFAULT_MARGIN_FRACTION,
+    box_height: float | None = None,
     crosslink_distance: float | None = None,
     crosslink_valence: int = 1,
     crosslink_prob: float = 1.0,
@@ -660,6 +735,20 @@ def create_simulation(
     crosslink_selection: list[int] | None = None,
     crosslink_start_step: int = 0,
     crosslink_seed: int | None = None,
+    mode: str = "brush",
+    surface_distance: float = 0.8,
+    surface_prob: float = 1.0,
+    surface_max_fraction: float = 0.5,
+    surface_preattached_fraction: float | None = None,
+    surface_dynamic: bool | None = None,
+    surface_k: float = 2000.0,
+    surface_tether: float = 0.6,
+    surface_ramp_steps: int = 500,
+    surface_check_every: int = 1000,
+    surface_start_step: int = 0,
+    surface_attraction: float = 0.0,
+    surface_attraction_width: float = 0.5,
+    surface_seed: int | None = None,
 ) -> Path:
     """Scaffold simulations/<name>/prepare.py and run it. Returns the sim folder.
 
@@ -677,6 +766,14 @@ def create_simulation(
     the run non-reactive and bit-for-bit what it was before the feature existed.
     The other crosslink_* arguments only matter when it is set; see
     tools/crosslink.py for what they mean and how far the results can be trusted.
+
+    `mode` is how chains attach to the surface: "brush" (default — residue 0 is
+    the fixed "Z" anchor, the pipeline exactly as it was), "free" or
+    "preattached" (chains hang from surface-bonded lysines; the surface_*
+    arguments configure that and are ignored in brush mode). See
+    tools/surface.py. The surface seed decides which lysines are pinned and
+    where; None draws one here so that prepare.py, and any restart, reproduce
+    the same starting state.
     """
 
     if nmol < 1:
@@ -685,6 +782,8 @@ def create_simulation(
         raise typer.BadParameter("Number of steps must be at least 1.")
     if platform not in {"CUDA", "CPU"}:
         raise typer.BadParameter("Platform must be 'CUDA' or 'CPU'.")
+    if mode not in MODES:
+        raise typer.BadParameter(f"mode must be one of {', '.join(MODES)} — got {mode!r}.")
 
     seq = _validate_sequence(sequence)
     slug = _slugify(name)
@@ -697,7 +796,7 @@ def create_simulation(
         )
 
     box_plan = plan_box(seq, concentration, nmol, spacing_fraction, length_measure,
-                        mass_concentration, margin_fraction)
+                        mass_concentration, margin_fraction, box_height)
     spacing = box_plan.spacing
     margin = box_plan.margin
     min_sane_spacing = box_plan.min_sane_spacing
@@ -720,6 +819,39 @@ def create_simulation(
             start_step=crosslink_start_step,
             seed=crosslink_seed,
         )
+
+    # Lysine-attached modes: validated now, with the chain count and lysine
+    # count this batch actually has, so a cap that cannot give every chain a
+    # bond is refused here and not at the start of a GPU job.
+    surface_settings = None
+    if mode != "brush":
+        import random as _random
+
+        surface_settings = SurfaceSettings(
+            mode=mode,
+            distance=surface_distance,
+            prob=surface_prob,
+            max_fraction=surface_max_fraction,
+            preattached_fraction=surface_preattached_fraction,
+            dynamic=surface_dynamic,
+            k=surface_k,
+            tether=surface_tether,
+            ramp_steps=surface_ramp_steps,
+            check_every=surface_check_every,
+            start_step=surface_start_step,
+            attraction=surface_attraction,
+            attraction_width=surface_attraction_width,
+            seed=int(surface_seed) if surface_seed is not None else _random.SystemRandom().randrange(2 ** 31),
+            z_wall=Z_WALL,
+        )
+        n_lys = seq.count("K")
+        if n_lys == 0:
+            raise typer.BadParameter(f"mode {mode!r} attaches chains through lysines, but the "
+                                     "sequence has no K.")
+        try:
+            check_capacity(surface_settings, nmol, nmol * n_lys)
+        except ValueError as error:
+            raise typer.BadParameter(str(error)) from None
 
     if spacing_fraction is not None:
         spacing_note = (f"spacing = {spacing_fraction} x the chain's own {length_measure} length "
@@ -748,8 +880,23 @@ def create_simulation(
             f"valence {crosslink_settings.valence}, p={crosslink_settings.prob}")
         crosslink_literal = repr(crosslink_settings.to_dict())
 
+    if surface_settings is None:
+        mode_note = "brush: residue 0 is the fixed anchor (default)"
+        surface_literal = "None"
+    else:
+        mode_note = (f"{mode}: lysines within {surface_settings.distance} nm "
+                     f"({surface_settings.distance_angstrom} A) of the tether plane bond to it; "
+                     f"bound lysines sit {surface_settings.tether} nm above the wall; cap "
+                     f"{surface_settings.max_fraction} of all lysines"
+                     + (f"; {surface_settings.preattached_fraction} bound at t=0"
+                        if mode == "preattached" else ""))
+        surface_literal = repr(surface_settings.to_dict())
+
     content = (
         PREPARE_TEMPLATE
+        .replace("__MODE_NOTE__", mode_note)
+        .replace("__MODE__", mode)
+        .replace("__SURFACE__", surface_literal)
         .replace("__SPACING_NOTE__", spacing_note)
         .replace("__SPACING__", str(spacing))
         .replace("__MARGIN_NOTE__", margin_note)
@@ -760,7 +907,7 @@ def create_simulation(
         .replace("__NY__", str(box_plan.ny))
         .replace("__L_X__", str(box_plan.l_box_x))
         .replace("__L_Y__", str(box_plan.l_box_y))
-        .replace("__Z_HEIGHT__", str(Z_HEIGHT))
+        .replace("__Z_HEIGHT__", str(box_plan.l_box_z))
         .replace("__N_SAVE__", str(n_save))
         .replace("__N_FRAMES__", str(n_frames))
         .replace("__Z_WALL__", str(Z_WALL))
@@ -777,7 +924,8 @@ def create_simulation(
     (sim_dir / "prepare.py").write_text(content)
 
     typer.echo(f"✓  Created simulations/{slug}/prepare.py")
-    typer.echo(f"   box:        [{box_plan.l_box_x}, {box_plan.l_box_y}, {Z_HEIGHT}] nm")
+    typer.echo(f"   box:        [{box_plan.l_box_x}, {box_plan.l_box_y}, {box_plan.l_box_z}] nm"
+               + ("" if box_height is None else "  (box height set by hand)"))
     typer.echo(f"   lattice:    {box_plan.nx} x {box_plan.ny} grafting points, {spacing} nm apart")
     if margin:
         typer.echo(f"   margin:     {margin} nm of empty surface on every side "
@@ -859,6 +1007,26 @@ def create_simulation(
     else:
         typer.echo("   crosslink:  off (default) — nothing reacts, identical to the "
                    "pre-crosslinking pipeline")
+    if surface_settings is None:
+        typer.echo("   mode:       brush (default) — residue 0 is the fixed surface anchor")
+    else:
+        n_lys = nmol * seq.count("K")
+        typer.echo(f"   mode:       {mode} — chains hang from surface-bonded lysines; "
+                   f"{seq.count('K')} lysines per chain, {n_lys} in all")
+        typer.echo(f"               reaction distance {surface_settings.distance} nm "
+                   f"({surface_settings.distance_angstrom} A) to the tether plane at "
+                   f"z = {surface_settings.z_pin:.3f} nm ({surface_settings.tether} nm above the "
+                   f"wall), p={surface_settings.prob}, cap {surface_settings.max_fraction} "
+                   f"({int(surface_settings.max_fraction * n_lys)} lysines), binding during the "
+                   f"run: {'on' if surface_settings.is_dynamic else 'off'}")
+        if mode == "preattached":
+            typer.echo(f"               {surface_settings.preattached_fraction} of all lysines "
+                       f"(~{round(surface_settings.preattached_fraction * n_lys)}) bonded at t=0, "
+                       f"at least one per chain")
+        typer.echo(f"               surface seed {surface_settings.seed} (pins are reproducible)")
+        if surface_settings.is_dynamic and not surface_settings.start_step:
+            typer.echo("⚠  surface_start_step is 0, so lysines left near the surface by the "
+                       "initial construction bind at the first check. Set it past equilibration.")
     typer.echo(f"   platform:   {platform}")
     if actual_steps != steps:
         typer.echo(f"   steps:      {actual_steps} (rounded from {steps} to a multiple of the {n_save}-step save frequency)")
@@ -929,6 +1097,14 @@ def new(
                  "so they stop wrapping, at the cost of a less crowded rim.",
         ),
     ] = DEFAULT_MARGIN_FRACTION,
+    box_height: Annotated[
+        float | None,
+        typer.Option(
+            help="Box height in nm. Default: 0.3 x the contour length, at least 50 nm. The "
+                 "box is periodic in z, so it must stay taller than the brush reaches plus "
+                 "the 4 nm cutoff — check z_max_nm / box_headroom_nm in metadata.csv.",
+        ),
+    ] = None,
     crosslink_distance: Annotated[
         float | None,
         typer.Option(
@@ -985,6 +1161,65 @@ def new(
         typer.Option(help="Seed for the reaction RNG (only used when --crosslink-prob < 1). "
                           "Defaults to the run's OpenMM seed, else a recorded random draw."),
     ] = None,
+    mode: Annotated[
+        str,
+        typer.Option(help="How chains attach: 'brush' (residue 0 is a fixed anchor — the default "
+                          "and the unchanged pipeline), 'free' (one random lysine per chain "
+                          "bonded at t=0, more may bind during the run) or 'preattached' (a "
+                          "random fraction of all lysines bonded at t=0). See tools/surface.py."),
+    ] = "brush",
+    surface_distance: Annotated[
+        float,
+        typer.Option(help="free/preattached: a lysine within this distance IN NANOMETRES of the "
+                          "tether plane bonds to the surface (0.8 nm = 8 A)."),
+    ] = 0.8,
+    surface_prob: Annotated[
+        float, typer.Option(help="free/preattached: P(bind | within the distance at a check).")
+    ] = 1.0,
+    surface_max_fraction: Annotated[
+        float,
+        typer.Option(help="free/preattached: global cap — the largest fraction of ALL lysines "
+                          "that may be surface-bonded. Must allow one bond per chain."),
+    ] = 0.5,
+    surface_preattached_fraction: Annotated[
+        float | None,
+        typer.Option(help="preattached: fraction of all lysines bonded at t=0 (at least one per "
+                          "chain)."),
+    ] = None,
+    surface_dynamic: Annotated[
+        bool | None,
+        typer.Option("--surface-dynamic/--no-surface-dynamic",
+                     help="May lysines bind during the run? Default: yes in free mode, no in "
+                          "preattached mode."),
+    ] = None,
+    surface_tether: Annotated[
+        float,
+        typer.Option(help="free/preattached: how far above the wall onset a bound lysine sits, nm."),
+    ] = 0.6,
+    surface_k: Annotated[
+        float, typer.Option(help="free/preattached: tether stiffness, kJ/mol/nm^2.")
+    ] = 2000.0,
+    surface_ramp_steps: Annotated[
+        int, typer.Option(help="free/preattached: steps over which a new tether's stiffness ramps in.")
+    ] = 500,
+    surface_check_every: Annotated[
+        int, typer.Option(help="free/preattached: MD steps between surface-binding checks.")
+    ] = 1000,
+    surface_start_step: Annotated[
+        int,
+        typer.Option(help="free/preattached: ignore surface binding before this step (the "
+                          "construction leaves beads near the surface)."),
+    ] = 0,
+    surface_attraction: Annotated[
+        float,
+        typer.Option(help="free/preattached: depth (kJ/mol) of an optional lysine-wall well on "
+                          "the tether plane. 0 = the wall stays purely repulsive (default)."),
+    ] = 0.0,
+    surface_seed: Annotated[
+        int | None,
+        typer.Option(help="free/preattached: seed for which lysines are pinned and for binding. "
+                          "Default: a recorded random draw."),
+    ] = None,
 ) -> None:
     """Scaffold and prepare a new surface-attached ELP simulation.
 
@@ -1026,6 +1261,7 @@ def new(
         length_measure=length_measure,
         mass_concentration=mass_concentration,
         margin_fraction=margin_fraction,
+        box_height=box_height,
         crosslink_distance=crosslink_distance,
         crosslink_valence=crosslink_valence,
         crosslink_prob=crosslink_prob,
@@ -1036,6 +1272,19 @@ def new(
         crosslink_start_step=crosslink_start_step,
         crosslink_selection=crosslink_selection,
         crosslink_seed=crosslink_seed,
+        mode=mode,
+        surface_distance=surface_distance,
+        surface_prob=surface_prob,
+        surface_max_fraction=surface_max_fraction,
+        surface_preattached_fraction=surface_preattached_fraction,
+        surface_dynamic=surface_dynamic,
+        surface_k=surface_k,
+        surface_tether=surface_tether,
+        surface_ramp_steps=surface_ramp_steps,
+        surface_check_every=surface_check_every,
+        surface_start_step=surface_start_step,
+        surface_attraction=surface_attraction,
+        surface_seed=surface_seed,
     )
 
 
