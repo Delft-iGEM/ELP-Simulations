@@ -1,0 +1,12 @@
+monoblock-free-xl-v2: bonds actually formed (mode free, 1010 frames, 70.6 ns)
+  lysines in the system:      256  (16 chains x 16)
+  K–K crosslinks:             76   using 152 lysines (59.4%)
+     intra-chain (loops):     39  (51.3% of K–K bonds)
+     inter-chain (bridges):   37  (48.7% of K–K bonds)
+  K–surface bonds (ground):   100   using 100 lysines (39.1%)
+     present at t=0:          16
+     formed during the run:   84
+  lysines still unreacted:    4  (1.6%)
+  first bond formed at        9.9 ns (frame 142), last at 63.4 ns (frame 905)
+  half the K–K bonds by       12.5 ns (frame 179)
+  chains bridged to another:  16 of 16, largest connected group 16 chains
