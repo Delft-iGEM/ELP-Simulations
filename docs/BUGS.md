@@ -62,6 +62,24 @@ and would have been read as valid results. The earlier reactive test runs
 and the bug stayed invisible — 114 of the 123 events in `monoblock-brush-xl` are
 inter-chain.
 
+**End-to-end verification** (`zz-pbc-check2`, CPU, 4 chains x 300 residues in a
+10 x 10 x 50 nm box, 40 000 steps, reaction distance 1.2 nm). The box is tight
+enough relative to the chains that bonds form across its faces, which is the
+condition the earlier smoke runs never reached:
+
+| | |
+| --- | --- |
+| crosslinks formed | 59 (55 intra, 4 inter) |
+| inter-chain bonds spanning the boundary | **2 of 4** |
+| their raw separations in the last frame | 9.52 and 9.44 nm, in a 10 nm box |
+| their minimum-image separations | 0.641 and 0.628 nm, i.e. sitting at r0 = 0.6 |
+| max abs coordinate over the run | 16.1 nm, all finite — **healthy** |
+
+Both boundary-spanning bonds are held at their rest length *through* the box
+face, and the run is stable. On the old code either one would have been
+evaluated at ~9.5 nm against r0 = 0.6 nm, for 0.5(2000)(8.9)^2 = 7.9e4 kJ/mol,
+and the run would have exploded exactly as the batch did.
+
 **Fix:** `force.setUsesPeriodicBoundaryConditions(True)`, with a comment
 explaining why. Regression test
 `tests/test_crosslink.py::test_crosslink_force_uses_periodic_boundaries` builds
