@@ -608,3 +608,55 @@ def test_post_hoc_frame_step_mapping_and_surface_block(tmp_path):
                           settings(start_step=n_save + 1, min_span=0), n_save=n_save,
                           verbose=False, drop_anchor=False)
     assert xl3.events == []
+
+
+# ---------------------------------------------------------------------------
+# Periodic boundary conditions on the crosslink bonds
+# ---------------------------------------------------------------------------
+
+def test_crosslink_force_uses_periodic_boundaries():
+    """A bond across the periodic boundary must be evaluated on the minimum image.
+
+    The reaction criterion is a minimum-image distance, so a pair 0.6 nm apart
+    across a box edge is bonded. If the HarmonicBondForce does not use periodic
+    boundaries OpenMM evaluates that bond on the raw coordinate difference --
+    one box length -- and the resulting force destroys the system. This is
+    BUG-XL-7, which wrecked all 12 crosslinking runs of the 2026-09-19 batch.
+    """
+    import openmm
+    from openmm import unit
+
+    box = 28.0
+    sites = make_sites(2, [0], 1)              # one site on each of two chains
+    s = settings(distance=0.8, k=2000.0, r0=0.6)
+    xl = Crosslinker(s, sites, seed=0)
+    assert xl.n_pairs == 1
+
+    system = openmm.System()
+    for _ in range(2):
+        system.addParticle(1.0 * unit.amu)
+    system.setDefaultPeriodicBoxVectors(*[openmm.Vec3(*v) * unit.nanometer for v in
+                                          ([box, 0, 0], [0, box, 0], [0, 0, box])])
+    force = xl.add_force(system)
+    assert force.usesPeriodicBoundaryConditions(), \
+        "crosslink bonds must use PBC or a bond across the box edge explodes"
+
+    # Two beads 0.5 nm apart *through* the boundary: raw separation 27.5 nm.
+    pos = np.array([[0.25, 5.0, 5.0], [box - 0.25, 5.0, 5.0]])
+    assert min_image_distances(pos, np.array([0]), np.array([1]),
+                               np.array([box, box, box]))[0] == pytest.approx(0.5)
+
+    xl.react(pos, np.array([box, box, box]), step=0)
+    assert xl.reacted.sum() == 1                       # the pair does react
+    xl.advance_ramps(10 ** 9)                          # ramp it fully in
+
+    context = openmm.Context(system, openmm.VerletIntegrator(0.001 * unit.picosecond),
+                             openmm.Platform.getPlatformByName("Reference"))
+    context.setPositions(pos * unit.nanometer)
+    energy = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(
+        unit.kilojoule_per_mole)
+
+    # Minimum image: 0.5(2000)(0.5-0.6)^2 = 10 kJ/mol. Raw separation would give
+    # 0.5(2000)(27.5-0.6)^2 = 7.2e5 kJ/mol.
+    assert energy == pytest.approx(10.0, abs=1e-3), \
+        f"bond energy {energy:.4g} kJ/mol -- evaluated on the raw separation, not the image"

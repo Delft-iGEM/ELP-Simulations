@@ -452,6 +452,21 @@ class Crosslinker:
 
         force = HarmonicBondForce()
         force.setName("crosslinks")
+        # THE critical line. The reaction criterion is a *minimum-image*
+        # distance (min_image_distances), so two lysines sitting 0.6 nm apart
+        # across a periodic boundary are a legitimate pair and do get bonded.
+        # Without this flag OpenMM evaluates that bond on the raw coordinate
+        # difference instead — one box length, ~28 nm in the block runs — and a
+        # k = 2000 kJ/mol/nm^2 bond stretched 27 nm past its 0.6 nm rest length
+        # pulls with 5e4 kJ/mol/nm. The system is destroyed within a few
+        # thousand steps.
+        #
+        # This is not hypothetical: it wrecked all 12 crosslinking runs of the
+        # 2026-09-19 block batch (see docs/BUGS.md BUG-XL-7). Every force
+        # CALVADOS builds itself sets this (calvados/interactions.py), and the
+        # surface tethers get it via periodicdistance() in their expression;
+        # this force was the one that did not.
+        force.setUsesPeriodicBoundaryConditions(True)
         r0 = self.settings.r0 * nanometer
         unit_k = kilojoule_per_mole / nanometer ** 2
         for b in range(self.n_pairs):

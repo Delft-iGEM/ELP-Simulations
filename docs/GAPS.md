@@ -49,3 +49,28 @@ Branch robust-audit. Entries are appended by several auditors; ids are prefixed 
   HPS-T (10.1021/acscentsci.9b00102), the ELP-specific Baul/Dzubiella model
   (10.1021/acs.biomac.0c00546, whose authors aim it at "ELP networks and hydrogels"), or TEA
   bolted onto CALVADOS (10.1021/jacsau.6c00523, validated on 16 ELP sequences).
+
+## RUN — performance and silent-failure gaps found from the 2026-09-19 batch
+
+* **RUN-1. The reactive loop is 6–9.5x slower than the plain path.** Measured on
+  the block batch: 7988 it/s non-reactive vs 1350 (monoblock) and 841
+  (tetrablock) it/s reactive; 7.43e3 vs 1.02e3 ns/day. Cause: the loop calls
+  `context.getState(getPositions=True)` every `check_every` = 1000 steps, which
+  forces a full GPU→CPU sync of all positions, and `updateParametersInContext`
+  re-uploads all 32 640 bond parameters on every change. Six of the twelve
+  reactive jobs hit their 2 h walltime as a result. Either raise `check_every`
+  (1000 steps = 10 ps is far finer than the chemistry justifies — see LIT-5),
+  or restrict the pair list by a setup-time cutoff, or budget ~3 h.
+* **RUN-2. Nothing detects a diverged simulation.** OpenMM does not error on
+  coordinates of 1e13 nm; the run continues to the end, `metadata.csv` records
+  "completed", and only the final PDB write fails — a run killed by walltime
+  before that point reports no error at all. `report_potential_energy` is off,
+  so the `StateDataReporter` log holds no energy trace to inspect afterwards
+  either. **Add a cheap finiteness/extent check** at each checkpoint (max |z| vs
+  box, or the potential energy) that fails the run loudly, and turn the energy
+  reporting on. This is what let BUG-XL-7 pass unnoticed.
+* **RUN-3. Smoke tests never produced an inter-chain crosslink.** Every audit
+  smoke run and every earlier reactive test formed only intra-chain bonds in
+  small boxes, so no bond ever spanned a periodic boundary and BUG-XL-7 was
+  invisible to the whole test suite. Any future smoke matrix must include a
+  case with chains close enough across a box edge to bond through it.

@@ -12,6 +12,77 @@ lists what was still in flight, so do not read a quiet area as a clean one.
 
 ---
 
+## BUG-XL-7 — crosslink bonds ignored the periodic boundary, and destroyed every reactive run
+
+**File:** `tools/crosslink.py` `Crosslinker.add_force`.
+**Severity:** CRITICAL. This silently corrupted **all 12 crosslinking runs** of
+the 2026-09-19 block batch (SLURM 265624–265643). It is one missing line.
+
+`add_force` builds a plain `HarmonicBondForce()` and never calls
+`setUsesPeriodicBoundaryConditions(True)`. Every force CALVADOS builds itself
+does (`calvados/interactions.py`: bonds, angles, restraints, scaled LJ/YU,
+FENE), and the surface tethers get periodicity via `periodicdistance()` inside
+their expression. The crosslink force was the only one without it.
+
+The reaction criterion, correctly, uses the **minimum image**
+(`min_image_distances`). So two lysines 0.6 nm apart *across* a box edge are a
+legitimate pair and do get bonded. OpenMM then evaluates that bond on the **raw
+coordinate difference** — one box length, 28.28 nm in the block runs — against
+r0 = 0.6 nm. With k = 2000 kJ/mol/nm² the bond pulls with
+
+    F = k·Δr = 2000 × 27.7 ≈ 5.5e4 kJ/mol/nm,  E ≈ 7.7e5 kJ/mol
+
+on two beads of ~128 Da. The system is destroyed within a few thousand steps.
+
+**Evidence.** `monoblock-brush-xl` (720 residues, 16 chains, 28.28 nm box,
+`crosslink_start_step` = 1 000 000):
+
+| frame | MD step | max abs coordinate |
+| --- | --- | --- |
+| 142 | 1 011 010 | 46 nm — healthy |
+| 143 | 1 018 080 | **1.1e11 nm** |
+| 999 | 7 070 000 | 1.6e13 nm |
+
+The third bond ever formed (step 1 005 500, chains 2→15) has a raw separation of
+24.1 nm against a minimum-image separation of 9.1 nm — i.e. it spans the
+boundary. Divergence follows within two checks. The same signature appears in
+every crosslinking run checked (`tetrablock-brush-xl` frame 143,
+`triblock-64-pre-xl` frame 150), while all eight non-crosslinking runs
+completed cleanly.
+
+**Why nobody noticed.** Nothing reports it. OpenMM does not error on huge
+coordinates, the `StateDataReporter` is configured without
+`potentialEnergy`, and `metadata.csv` records "completed". The five runs that
+*did* fail crashed only at the very last line, writing the final PDB
+(`ValueError: coordinate "1670550345991.72" could not be represented in a
+width-8 field`); the six that hit the 2 h walltime were never flagged at all
+and would have been read as valid results. The earlier reactive test runs
+(`does-link-work2`, `xl-dense-reactive`) and every audit smoke run produced
+**only intra-chain events in small boxes**, so no bond ever spanned a boundary
+and the bug stayed invisible — 114 of the 123 events in `monoblock-brush-xl` are
+inter-chain.
+
+**Fix:** `force.setUsesPeriodicBoundaryConditions(True)`, with a comment
+explaining why. Regression test
+`tests/test_crosslink.py::test_crosslink_force_uses_periodic_boundaries` builds
+a two-bead system 0.5 nm apart through a 28 nm boundary and asserts the bond
+energy is 10 kJ/mol (minimum image) and not 7.2e5 kJ/mol (raw). Verified to
+fail with the line removed and pass with it restored. **Status: fixed.**
+
+**Consequence for existing data:** every crosslinked trajectory produced before
+this fix is physically meaningless from the first boundary-spanning bond
+onwards, and so is every crosslink event recorded after that point (on
+coordinates of 1e13 nm, minimum-image distances are noise). The non-crosslinked
+runs are unaffected by this particular bug. Re-run the reactive batch.
+
+**Related:** the same runs were 6–9.5x slower than their non-reactive
+counterparts (1350 and 841 it/s against 7988 it/s; 1.02e3 vs 7.43e3 ns/day),
+which is why six of them hit the 2 h walltime. The reaction loop calls
+`context.getState(getPositions=True)` every `check_every` = 1000 steps, forcing
+a full GPU→CPU position sync, and `updateParametersInContext` re-uploads all
+32 640 bond parameters on every change. A 70 ns reactive run of these systems
+needs ~2.5–3 h, not 2 h. See `docs/GAPS.md`.
+
 ## BUG-WALL-1 — the surface wall is ~5000x too soft (it barely exists)
 
 **File:** `tools/new_simulation.py` (`PREPARE_TEMPLATE`, `ext_force_expr`), every
