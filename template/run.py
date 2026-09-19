@@ -4,6 +4,7 @@ from ..prepare import build_sim # type: ignore
 from tools.metadata import dcd_n_frames, write_metadata, write_timing
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 import time
 import openmm
 
@@ -12,10 +13,33 @@ runtime_dir = Path(__file__).parent.resolve()
 with open(runtime_dir / "config.yaml", 'r') as stream:
      config = safe_load(stream)
 
-available_platforms = {openmm.Platform.getPlatform(i).getName() for i in range(openmm.Platform.getNumPlatforms())}
-if config.get('platform') not in available_platforms:
-     print(f"Platform '{config.get('platform')}' not available on this machine ({', '.join(sorted(available_platforms))}); falling back to CPU.")
+# Fall back to CPU when the requested platform cannot actually run here. The
+# platform *name* is not the test: an OpenMM build with CUDA compiled in lists
+# "CUDA" on every machine, GPU or not, and only fails when a Context is
+# created — so the check is to create one, on a one-particle system.
+def _platform_works(name: str) -> bool:
+     try:
+          platform = openmm.Platform.getPlatformByName(name)
+          system = openmm.System()
+          system.addParticle(1.0)
+          openmm.Context(system, openmm.VerletIntegrator(0.001), platform)
+          return True
+     except Exception as error:                     # OpenMMException, mostly
+          print(f"Platform '{name}' cannot be used on this machine: {error}")
+          return False
+
+if not _platform_works(config.get('platform', 'CPU')):
+     available = ', '.join(sorted(openmm.Platform.getPlatform(i).getName()
+                                  for i in range(openmm.Platform.getNumPlatforms())))
+     print(f"Platform '{config.get('platform')}' not usable here ({available} compiled in); "
+           "falling back to CPU.")
      config['platform'] = 'CPU'
+     # CALVADOS passes config['threads'] to the CPU platform (default 1). A
+     # fallback inside a SLURM job would otherwise leave every other allocated
+     # core idle.
+     if not config.get('threads'):
+          config['threads'] = int(os.environ.get('SLURM_CPUS_PER_TASK') or os.cpu_count() or 1)
+          print(f"CPU platform: using {config['threads']} threads.")
 
 with open(runtime_dir / "components.yaml", 'r') as stream:
      components = safe_load(stream)
@@ -34,6 +58,25 @@ build_sim(sim)
 started = datetime.now(timezone.utc)
 clock = time.monotonic()
 
+# Whatever happens inside the MD — a NaN, a walltime SIGTERM, a bug in the
+# reaction loop — the timing and metadata still get written on the way out, so
+# a crashed run is recorded as "incomplete" with the frames it did produce and
+# the time it took, rather than leaving a metadata.csv that still says what
+# prepare.py planned. The exception itself is re-raised untouched.
+def _record_run():
+     elapsed = time.monotonic() - clock
+     write_timing(
+          runtime_dir,
+          seconds=elapsed,
+          started=started.isoformat(timespec="seconds"),
+          finished=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+          frames=dcd_n_frames(runtime_dir / f"{config['sysname']}.dcd"),
+     )
+     # The run is over, so metadata.csv can now record what actually came out
+     # of it (status, frames written, how long it took) on top of the settings
+     # prepare.py already stored.
+     write_metadata(runtime_dir)
+
 # Reactive crosslinking is opt-in. prepare.py writes runtime/crosslink.yaml only
 # when it was asked for (tools.crosslink.CROSSLINK_FILENAME — spelled out here so
 # a run with no crosslinking never even imports the module), and without that
@@ -43,29 +86,18 @@ clock = time.monotonic()
 # Attaching chains through their lysines (tools.surface, modes "free" and
 # "preattached") is the same kind of opt-in: prepare.py writes surface.yaml only
 # for those modes, and without it the run is brush mode on the path above.
-if (runtime_dir / "crosslink.yaml").is_file() or (runtime_dir / "surface.yaml").is_file():
-     from tools.crosslink import load_settings, run_reactive
-     from tools.surface import load_settings as load_surface_settings
+try:
+     if (runtime_dir / "crosslink.yaml").is_file() or (runtime_dir / "surface.yaml").is_file():
+          from tools.crosslink import load_settings, run_reactive
+          from tools.surface import load_settings as load_surface_settings
 
-     crosslink = load_settings(runtime_dir)
-     surface = load_surface_settings(runtime_dir)
-     if crosslink is None and surface is None:
-          sim.simulate()
+          crosslink = load_settings(runtime_dir)
+          surface = load_surface_settings(runtime_dir)
+          if crosslink is None and surface is None:
+               sim.simulate()
+          else:
+               run_reactive(sim, crosslink, runtime_dir, surface=surface)
      else:
-          run_reactive(sim, crosslink, runtime_dir, surface=surface)
-else:
-     sim.simulate()
-
-elapsed = time.monotonic() - clock
-write_timing(
-     runtime_dir,
-     seconds=elapsed,
-     started=started.isoformat(timespec="seconds"),
-     finished=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-     frames=dcd_n_frames(runtime_dir / f"{config['sysname']}.dcd"),
-)
-
-# The run is over, so metadata.csv can now record what actually came out of it
-# (status, frames written, how long it took) on top of the settings prepare.py
-# already stored.
-write_metadata(runtime_dir)
+          sim.simulate()
+finally:
+     _record_run()

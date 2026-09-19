@@ -65,9 +65,14 @@ Z_HEIGHT = 50.0  # nm, the *minimum* box height (see plan_box_height)
 # (cutoff_yu, 4 nm) of the box top interacts with the periodic image of the
 # grafted layer at the bottom: it is next to the surface again. The box has to
 # be taller than the brush ever reaches, plus that cutoff. 50 nm was not: the
-# 720-1040-residue block ELPs at 0.02 chains/nm^2 reached 51-63 nm. Measured
-# on those runs the highest bead sat at 0.16-0.19 x the contour length, so the
-# default height is this fraction of the contour, never below Z_HEIGHT.
+# 720-1040-residue block ELPs at 0.02 chains/nm^2 (tetrablock, monoblock-test,
+# triblock-64-test) reached z_max = 59.3, 56.7 and 64.9 nm in a 50 nm box —
+# 0.15, 0.21 and 0.16 x the contour length, and 7-15 nm *through* the box top.
+# Those numbers are a lower bound on the true brush height: a bead written at
+# z = 59 nm is physically at z = 9 nm, inside the brush, where the wall (which
+# acts on the unwrapped z) no longer stops it. So the default height is this
+# fraction of the contour, never below Z_HEIGHT; at 0.3 the 1040-mer gets a
+# 120 nm box, 55 nm above the highest bead ever seen.
 # A taller box costs nothing to speak of — the neighbour list scales with the
 # beads, not the empty volume above them — so err on the tall side.
 # metadata.csv records z_max_nm / box_headroom_nm after every run: if the
@@ -75,7 +80,31 @@ Z_HEIGHT = 50.0  # nm, the *minimum* box height (see plan_box_height)
 # must be raised (box_height in the notebook's Shared, --box-height in sim new).
 BOX_HEIGHT_FRACTION = 0.3  # of the contour length
 BOX_HEIGHT_STEP = 5.0  # nm — heights are rounded up to a multiple of this
-Z_WALL = 1.9  # nm, depth of the surface-attachment potential well
+Z_WALL = 1.9  # nm, onset of the repulsive surface wall
+
+# Stiffness of that wall, kJ/mol/nm^2. The wall is CALVADOS's one-sided
+# harmonic CustomExternalForce, step(z_wall-z) * 0.5 * WALL_K * (z_wall-z)^2, and
+# until 2026-09 the expression had no prefactor at all: k = 1 kJ/mol/nm^2, i.e.
+# a bead had to sink 2.2 nm below the onset before it cost one kT (2.44 kJ/mol
+# at 293 K). Measured on the finished brush runs, 1.4-1.8 % of all bead
+# samples were below the wall onset, 0.5 % were below z = 1.0 nm, and the
+# deepest bead sat at z = -0.66 nm — 2.6 nm inside the "surface", where the
+# box is periodic and it is really next to the top of the box. For the lysine
+# runs (monoblock-test, triblock-64-test) 6.6 % of all lysine samples were
+# below the onset, which no surface-binding statistic survives.
+#
+# 5000 kJ/mol/nm^2 makes the wall a wall: 0.1 nm of penetration costs 25 kJ/mol
+# (10 kT), and the thermal penetration depth sqrt(kT/k) is 0.02 nm. It is
+# below CALVADOS's own bond stiffness (kb = 8033 kJ/mol/nm^2, same masses), so
+# it adds no timescale the 10 fs Langevin step does not already resolve. The
+# form stays harmonic rather than 9-3/WCA so the expression, and any run that
+# parses it (tools.metadata reads z_wall out of it), keep the same shape.
+WALL_K = 5000.0
+
+# Height of the brush anchor (residue 0, the fixed "Z" bead) above z = 0, nm.
+# Just above the wall onset so the anchor itself, and everything bonded to it,
+# start on the allowed side of a wall that now actually repels.
+Z_ANCHOR = 2.0
 
 # OpenMM requires the nonbonded cutoff to be less than half the box size.
 # CALVADOS's default electrostatics cutoff (cutoff_yu) is 4.0 nm, so the box
@@ -221,9 +250,19 @@ def plan_box_height(n_residues: int, box_height: float | None = None) -> float:
     those constants for where the numbers come from. An explicit height is
     taken as is (still checked against the cutoff floor).
     """
+    wanted = BOX_HEIGHT_FRACTION * chain_length_nm(n_residues, "contour")
+    default = max(Z_HEIGHT, math.ceil(wanted / BOX_HEIGHT_STEP) * BOX_HEIGHT_STEP)
     if box_height is None:
-        wanted = BOX_HEIGHT_FRACTION * chain_length_nm(n_residues, "contour")
-        box_height = max(Z_HEIGHT, math.ceil(wanted / BOX_HEIGHT_STEP) * BOX_HEIGHT_STEP)
+        box_height = default
+    elif box_height < default:
+        # Allowed — a short test run is a legitimate reason — but never silently:
+        # the finished 50 nm runs pierced their box top by 7-15 nm (see
+        # BOX_HEIGHT_FRACTION), and a bead that wraps over the top comes back
+        # down through the grafting plane with no wall to stop it.
+        typer.echo(f"⚠  box_height = {box_height} nm is below the {default:g} nm the "
+                   f"{n_residues}-residue chain would get by default ({BOX_HEIGHT_FRACTION} x "
+                   f"contour, min {Z_HEIGHT:g}); the brush may reach the periodic box top. "
+                   f"Check z_max_nm / box_headroom_nm in metadata.csv afterwards.")
     if box_height < MIN_BOX_L:
         raise typer.BadParameter(
             f"box_height = {box_height} nm is below {MIN_BOX_L} nm: OpenMM needs the "
@@ -572,12 +611,18 @@ def build_sim(sim: Sim):
      ibead = 0
      i = 0
      for comp in components:
-          # CALVADOS builds each chain's starting conformation with a lateral
-          # offset and extent of its own, so xinit's x/y centre is not (0, 0).
-          # Recentre it on the lattice point, otherwise the whole grafting
-          # pattern sits offset from the lattice the box is built around.
-          xy_centre = 0.5 * (comp.xinit[:, :2].min(axis=0) + comp.xinit[:, :2].max(axis=0))
-          xinit_centred = comp.xinit - np.array([xy_centre[0], xy_centre[1], 0.0])
+          # CALVADOS builds each chain's starting conformation (build_compact)
+          # as a serpentine through a cube of side ~cbrt(N) bonds, centred on
+          # the origin — so bead 0 is the cube's lowest corner, at
+          # -0.5*cbrt(N)*0.38 nm in x, y AND z (-1.9 nm for 1040 residues).
+          # Until 2026-09 only the x/y centre of that cube was moved onto the
+          # lattice point and z was shifted by a flat 2.0: the anchor ended up
+          # ~2 nm off its lattice point sideways and at z = 0.1-1.4 nm, i.e.
+          # BELOW the wall onset, permanently (it is fixed), with ~45 % of all
+          # beads starting under the wall. Shifting by bead 0's own position
+          # puts the anchor exactly on the lattice point at z_anchor and, since
+          # bead 0 is the minimum corner, every other bead above it.
+          xinit_anchored = comp.xinit - comp.xinit[0]
 
           for idx in range(comp.nmol):
                j = ibead + comp.nbeads
@@ -590,11 +635,19 @@ def build_sim(sim: Sim):
                # 0, and OpenMM holds zero-mass particles completely fixed — so
                # this lattice point is where the chain stays grafted for the
                # whole run, in x, y and z.
-               pos = xinit_centred + np.array([x0, y0, 2.0])
+               pos = xinit_anchored + np.array([x0, y0, z_anchor])
                sim.pos[ibead:j] = pos
 
                ibead = j
                i += 1
+
+     # The wall is stiff (wall_k), so a bead that starts under it would be
+     # launched: refuse to write a starting structure with one. Cheap, and it
+     # pins down the build_compact assumption above if CALVADOS ever changes it.
+     lowest = float(np.asarray(sim.pos)[:, 2].min())
+     if lowest < z_wall:
+          raise RuntimeError(f"starting structure has a bead at z = {lowest:.3f} nm, below the "
+                             f"wall onset at {z_wall} nm")
 
      md.Trajectory(sim.pos, sim.top, 0, sim.box, [90,90,90]).save(sim.pdb_cg)
 
@@ -610,9 +663,15 @@ box = [__L_X__, __L_Y__, __Z_HEIGHT__]
 N_save = __N_SAVE__
 N_frames = __N_FRAMES__
 
-# OpenMM runs in nm. The wall keeps the "Z"-tagged end of each ELP anchored
-# near the surface at z ~= 0.
+# OpenMM runs in nm. The surface is a one-sided harmonic wall on every bead,
+# step(z_wall - z) * 0.5 * wall_k * (z_wall - z)^2: nothing below z_wall, and
+# the "Z"-tagged residue 0 of every chain is held fixed at z_anchor, just above
+# it. wall_k is what makes it impenetrable — see WALL_K in
+# tools/new_simulation.py for the numbers behind it. metadata.csv records the
+# full expression (ext_force_expr).
 z_wall = __Z_WALL__
+wall_k = __WALL_K__
+z_anchor = __Z_ANCHOR__
 
 sequences: dict[str, str] = {
      "__SEQ_NAME__": "__SEQUENCE__"
@@ -639,7 +698,7 @@ if __name__ == "__main__":
           ionic = 0.19,
           pH = 7.5,
           ext_force = True,
-          ext_force_expr = f'step({z_wall}-z)*0.5*({z_wall}-z)^2',
+          ext_force_expr = f'step({z_wall}-z)*0.5*{wall_k}*({z_wall}-z)^2',
           topol = 'grid',
           wfreq = N_save,
           steps = N_frames*N_save,
@@ -788,6 +847,18 @@ def create_simulation(
     seq = _validate_sequence(sequence)
     slug = _slugify(name)
 
+    # In brush mode prepare.py rewrites residue 0 as the "Z" anchor tag, which
+    # CALVADOS treats as a valine (with the N-terminal +1 charge, see GAPS).
+    # Whatever the first letter was is gone from the simulated chain; for a
+    # lysine that also means one reactive site fewer for crosslinking — so say
+    # so, instead of letting the sequence in the run differ silently from the
+    # one that was typed.
+    if mode == "brush" and seq[0] == "K":
+        typer.echo(f"⚠  brush mode replaces residue 0 with the fixed 'Z' anchor bead, so the "
+                   f"leading K of this sequence is NOT simulated as a lysine: the chain has "
+                   f"{seq.count('K') - 1} reactive lysines, not {seq.count('K')}. Prepend a "
+                   f"residue (e.g. G) if that lysine matters.")
+
     root = _project_root()
     sim_dir = root / "simulations" / slug
     if sim_dir.exists():
@@ -911,6 +982,8 @@ def create_simulation(
         .replace("__N_SAVE__", str(n_save))
         .replace("__N_FRAMES__", str(n_frames))
         .replace("__Z_WALL__", str(Z_WALL))
+        .replace("__WALL_K__", str(WALL_K))
+        .replace("__Z_ANCHOR__", str(Z_ANCHOR))
         .replace("__SEQ_NAME__", slug)
         .replace("__SEQUENCE__", seq)
         .replace("__NMOL__", str(nmol))

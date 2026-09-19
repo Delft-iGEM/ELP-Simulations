@@ -44,6 +44,13 @@ class _Tee:
         for stream in self._streams:
             stream.flush()
 
+    def __getattr__(self, name):
+        # Anything else (isatty, encoding, fileno, ...) — libraries such as
+        # typer/click, tqdm and rich probe sys.stdout for these, and an
+        # AttributeError from inside a `with save_text(...)` block would abort
+        # the cell. Answer for the real stdout, which is the first stream.
+        return getattr(self._streams[0], name)
+
 
 @contextmanager
 def save_text(sim_name: str, name: str):

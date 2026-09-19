@@ -207,7 +207,16 @@ COLUMN_ALIASES: dict[str, str] = {
 # Cells meaning "not set" — fall back to Shared, exactly as a blank cell does.
 BLANK_VALUES = {"", "-", "none", "n/a", "na", "default", "off"}
 
-WALLTIME_RE = re.compile(r"^(?:(\d+)-)?(\d+):([0-5]?\d)(?::([0-5]?\d))?$")
+# SLURM's own grammar (sbatch(1), --time): "minutes", "minutes:seconds",
+# "hours:minutes:seconds", "days-hours", "days-hours:minutes" and
+# "days-hours:minutes:seconds". Note that a bare "H:MM" is *not* hours and
+# minutes to SLURM — two colon-separated fields are minutes:seconds — so
+# "2:00" buys two minutes, not two hours. Parsed with exactly SLURM's meaning
+# so the notebook's walltime totals are what the scheduler will enforce.
+WALLTIME_RE = re.compile(
+    r"^(?:(?P<days>\d+)-(?P<dh>\d+)(?::(?P<dm>[0-5]?\d))?(?::(?P<ds>[0-5]?\d))?"
+    r"|(?P<a>\d+)(?::(?P<b>[0-5]?\d))?(?::(?P<c>[0-5]?\d))?)$"
+)
 
 
 def _norm_header(header: str) -> str:
@@ -258,6 +267,16 @@ def parse_sequence(text: str) -> tuple[str, str]:
         tokens = re.findall(r"\([^)]*\)|[A-Za-z]+\d*", raw)
         if not tokens:
             raise ValueError(f"{raw!r} has no recognizable ELP tokens")
+        # A bare letter with no count ("K V3") is inserted by elibpy as ONE
+        # literal residue, not as a VPGKG pentapeptide — almost never what a
+        # shorthand cell means, and invisible in the residue count. Refuse it.
+        bare = [t for t in tokens if re.fullmatch(r"[A-Za-z]", t)]
+        if bare:
+            raise ValueError(
+                f"{raw!r}: token(s) {', '.join(repr(t) for t in bare)} have no repeat count "
+                f"— write e.g. '{bare[0].upper()}1' for one VPG{bare[0].upper()}G repeat, or "
+                f"'({bare[0].upper()})' to insert the single residue literally"
+            )
         components = [(token, token) for token in tokens]
         sequence = build_sequence_with_features(components)["seq"]
         return _validate_sequence(sequence), humanize_seq(components)
@@ -267,19 +286,27 @@ def parse_sequence(text: str) -> tuple[str, str]:
 
 
 def parse_walltime(value: str) -> int:
-    """SLURM walltime -> seconds. Accepts D-HH:MM:SS, HH:MM:SS, HH:MM and MM."""
+    """SLURM walltime -> seconds, with SLURM's meaning for every form it accepts.
+
+    MM, MM:SS, HH:MM:SS, D-HH, D-HH:MM and D-HH:MM:SS (see WALLTIME_RE). A
+    two-field "H:MM" is minutes:seconds to SLURM, so it is here too — write
+    "2:00:00" for two hours.
+    """
     text = (value or "").strip()
-    if text.isdigit():           # bare minutes, as SLURM also reads it
-        return int(text) * 60
     match = WALLTIME_RE.match(text)
     if not match:
         raise ValueError(f"{value!r} is not a SLURM walltime (use HH:MM:SS)")
-    days, first, second, third = match.groups()
-    if third is None:            # HH:MM
-        hours, minutes, seconds = int(first), int(second), 0
-    else:
-        hours, minutes, seconds = int(first), int(second), int(third)
-    return ((int(days or 0) * 24 + hours) * 60 + minutes) * 60 + seconds
+    g = match.groupdict()
+    if g["days"] is not None:                          # D-HH[:MM[:SS]]
+        days, hours = int(g["days"]), int(g["dh"])
+        minutes, seconds = int(g["dm"] or 0), int(g["ds"] or 0)
+    elif g["c"] is not None:                           # HH:MM:SS
+        days, hours, minutes, seconds = 0, int(g["a"]), int(g["b"]), int(g["c"])
+    elif g["b"] is not None:                           # MM:SS
+        days, hours, minutes, seconds = 0, 0, int(g["a"]), int(g["b"])
+    else:                                              # MM
+        days, hours, minutes, seconds = 0, 0, int(g["a"]), 0
+    return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
 
 
 def format_duration(seconds: float) -> str:
@@ -521,7 +548,15 @@ def print_summary(run: RunPlan, anchor_sigma: float | None = None) -> None:
 
     print(f"simulation:      {spec.name}   (CSV row {spec.row})")
     if spec.sequence_label and spec.sequence_label != f"{len(spec.sequence)} aa":
+        # The label collapses every VPGxG pentapeptide to its guest letter, so
+        # "G1 A1 G1 A1" reads as "GAGA" — which is NOT a literal GAGA block.
+        # Say so, and show the real start of the chain, so the two can't be
+        # confused when a literal (GAGAGA) fragment was what was meant.
         print(f"built sequence:  {spec.sequence_label}")
+        print(f"                 (one letter per VPGxG pentapeptide — 'GA' above is "
+              f"VPGGGVPGAG, not a literal GA; only (…) fragments are literal)")
+        head = spec.sequence[:60]
+        print(f"sequence starts: {head}{'…' if len(spec.sequence) > 60 else ''}")
     print(f"sequence:        {len(spec.sequence)} residues, {plan.chain_length:.2f} nm "
           f"({shared.length_measure} length), {plan.chain_mass_da / 1000:.2f} kDa")
     print(f"box:             [{plan.l_box_x}, {plan.l_box_y}, {plan.l_box_z}] nm"

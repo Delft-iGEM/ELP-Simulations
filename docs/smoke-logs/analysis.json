@@ -1,0 +1,497 @@
+{
+ "brush-noxl": {
+  "name": "zz-audit-smoke-brush-noxl",
+  "mode": "brush",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   4,
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "6000",
+  "wall_seconds": "2.145",
+  "events_kk": 0,
+  "events_surface": 0,
+  "events_surface_initial": 0,
+  "kinds": [],
+  "frame_conv_old(round(step/n_save))": true,
+  "frame_conv_new(round(step/n_save)-1)": true,
+  "event_times_ps": [],
+  "summary": {
+   "formed": null,
+   "intra": null,
+   "inter": null,
+   "surface": null,
+   "sf_init": null,
+   "sf_run": null,
+   "steps": null
+  },
+  "frames": 1000,
+  "n_frames_planned_meta": "1000",
+  "n_frames_saved_meta": "1000",
+  "nan_in_dcd": false,
+  "min_z": 0.9834117293357849,
+  "max_z": 3.973104953765869,
+  "min_z_last_frame": 1.1201895475387573,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.3169,
+  "frac_beads_below_z0": 0.0,
+  "mean_rg_nm": 0.948,
+  "mean_rg_last_half_nm": 1.017,
+  "anchor_max_displacement_nm": 0.0,
+  "anchor_z": [
+   1.43,
+   1.43,
+   1.43,
+   1.43
+  ],
+  "kk_last_frame_dist_nm": [],
+  "surface_last_frame_off_pin_nm": [],
+  "pins_outside_box_xy": [],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ },
+ "brush-xl": {
+  "name": "zz-audit-smoke-brush-xl",
+  "mode": "brush",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   4,
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "6000",
+  "wall_seconds": "2.05",
+  "events_kk": 7,
+  "events_surface": 0,
+  "events_surface_initial": 0,
+  "kinds": [
+   "intra"
+  ],
+  "frame_conv_old(round(step/n_save))": true,
+  "frame_conv_new(round(step/n_save)-1)": false,
+  "event_times_ps": [
+   2.0,
+   2.0,
+   2.0,
+   4.0,
+   26.0,
+   26.0,
+   46.0
+  ],
+  "summary": {
+   "formed": 7,
+   "intra": 7,
+   "inter": 0,
+   "surface": null,
+   "sf_init": null,
+   "sf_run": null,
+   "steps": 6000
+  },
+  "frames": 1000,
+  "n_frames_planned_meta": "1000",
+  "n_frames_saved_meta": "1000",
+  "nan_in_dcd": false,
+  "min_z": 0.7690750360488892,
+  "max_z": 4.859447956085205,
+  "min_z_last_frame": 0.7690750360488892,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.2779,
+  "frac_beads_below_z0": 0.0,
+  "mean_rg_nm": 1.219,
+  "mean_rg_last_half_nm": 1.29,
+  "anchor_max_displacement_nm": 0.0,
+  "anchor_z": [
+   1.43,
+   1.43,
+   1.43,
+   1.43
+  ],
+  "kk_last_frame_dist_nm": [
+   0.651,
+   0.692,
+   0.612,
+   0.65,
+   0.662,
+   0.598,
+   0.628
+  ],
+  "surface_last_frame_off_pin_nm": [],
+  "pins_outside_box_xy": [],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ },
+ "brush-xl-k1": {
+  "name": "zz-audit-smoke-brush-xl-k1",
+  "mode": "brush",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "6000",
+  "wall_seconds": "9.499",
+  "events_kk": 4,
+  "events_surface": 0,
+  "events_surface_initial": 0,
+  "kinds": [
+   "intra"
+  ],
+  "frame_conv_old(round(step/n_save))": false,
+  "frame_conv_new(round(step/n_save)-1)": true,
+  "event_times_ps": [
+   2.0,
+   2.0,
+   2.0,
+   2.0
+  ],
+  "summary": {
+   "formed": 4,
+   "intra": 4,
+   "inter": 0,
+   "surface": null,
+   "sf_init": null,
+   "sf_run": null,
+   "steps": 6000
+  },
+  "frames": 1000,
+  "n_frames_planned_meta": "1000",
+  "n_frames_saved_meta": "1000",
+  "nan_in_dcd": false,
+  "min_z": 0.9947360157966614,
+  "max_z": 5.677453517913818,
+  "min_z_last_frame": 1.0871864557266235,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.2414,
+  "frac_beads_below_z0": 0.0,
+  "mean_rg_nm": 1.141,
+  "mean_rg_last_half_nm": 1.182,
+  "anchor_max_displacement_nm": 0.0,
+  "anchor_z": [
+   1.43,
+   1.43,
+   1.43,
+   1.43
+  ],
+  "kk_last_frame_dist_nm": [
+   0.608,
+   0.61,
+   0.601,
+   0.623
+  ],
+  "surface_last_frame_off_pin_nm": [],
+  "pins_outside_box_xy": [],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ },
+ "free-xl": {
+  "name": "zz-audit-smoke-free-xl",
+  "mode": "free",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   4,
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "6000",
+  "wall_seconds": "3.42",
+  "events_kk": 2,
+  "events_surface": 6,
+  "events_surface_initial": 4,
+  "kinds": [
+   "intra",
+   "surface"
+  ],
+  "frame_conv_old(round(step/n_save))": true,
+  "frame_conv_new(round(step/n_save)-1)": false,
+  "event_times_ps": [
+   2.0,
+   2.0,
+   42.0,
+   44.0
+  ],
+  "summary": {
+   "formed": 2,
+   "intra": 2,
+   "inter": 0,
+   "surface": 6,
+   "sf_init": 4,
+   "sf_run": 2,
+   "steps": 6000
+  },
+  "frames": 1000,
+  "n_frames_planned_meta": "1000",
+  "n_frames_saved_meta": "1000",
+  "nan_in_dcd": false,
+  "min_z": 1.0542409420013428,
+  "max_z": 12.474361419677734,
+  "min_z_last_frame": 1.248270034790039,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.0219,
+  "frac_beads_below_z0": 0.0,
+  "mean_rg_nm": 2.055,
+  "mean_rg_last_half_nm": 1.678,
+  "kk_last_frame_dist_nm": [
+   0.618,
+   0.618
+  ],
+  "surface_last_frame_off_pin_nm": [
+   0.03,
+   0.091,
+   0.025,
+   0.103,
+   0.075,
+   0.052
+  ],
+  "pins_outside_box_xy": [],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ },
+ "pre-xl": {
+  "name": "zz-audit-smoke-pre-xl",
+  "mode": "preattached",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   4,
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "6000",
+  "wall_seconds": "2.318",
+  "events_kk": 2,
+  "events_surface": 8,
+  "events_surface_initial": 8,
+  "kinds": [
+   "intra",
+   "surface"
+  ],
+  "frame_conv_old(round(step/n_save))": true,
+  "frame_conv_new(round(step/n_save)-1)": false,
+  "event_times_ps": [
+   2.0,
+   14.0
+  ],
+  "summary": {
+   "formed": 2,
+   "intra": 2,
+   "inter": 0,
+   "surface": 8,
+   "sf_init": 8,
+   "sf_run": 0,
+   "steps": 6000
+  },
+  "frames": 1000,
+  "n_frames_planned_meta": "1000",
+  "n_frames_saved_meta": "1000",
+  "nan_in_dcd": false,
+  "min_z": -0.09715720266103745,
+  "max_z": 11.624982833862305,
+  "min_z_last_frame": -0.05059992894530296,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.0551,
+  "frac_beads_below_z0": 0.00038,
+  "mean_rg_nm": 1.466,
+  "mean_rg_last_half_nm": 1.215,
+  "kk_last_frame_dist_nm": [
+   0.615,
+   0.583
+  ],
+  "surface_last_frame_off_pin_nm": [
+   0.039,
+   0.034,
+   0.047,
+   0.059,
+   0.02,
+   0.041,
+   0.014,
+   0.046
+  ],
+  "pins_outside_box_xy": [],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ },
+ "free-xl-late": {
+  "name": "zz-audit-smoke-free-xl-late",
+  "mode": "free",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   4,
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "6000",
+  "wall_seconds": "3.716",
+  "events_kk": 2,
+  "events_surface": 4,
+  "events_surface_initial": 4,
+  "kinds": [
+   "intra",
+   "surface"
+  ],
+  "frame_conv_old(round(step/n_save))": true,
+  "frame_conv_new(round(step/n_save)-1)": false,
+  "event_times_ps": [
+   30.0,
+   46.0
+  ],
+  "summary": {
+   "formed": 2,
+   "intra": 2,
+   "inter": 0,
+   "surface": 4,
+   "sf_init": 4,
+   "sf_run": 0,
+   "steps": 6000
+  },
+  "frames": 1000,
+  "n_frames_planned_meta": "1000",
+  "n_frames_saved_meta": "1000",
+  "nan_in_dcd": false,
+  "min_z": 1.5847972631454468,
+  "max_z": 12.508112907409668,
+  "min_z_last_frame": 1.802519679069519,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.0013,
+  "frac_beads_below_z0": 0.0,
+  "mean_rg_nm": 2.234,
+  "mean_rg_last_half_nm": 1.767,
+  "kk_last_frame_dist_nm": [
+   0.621,
+   0.611
+  ],
+  "surface_last_frame_off_pin_nm": [
+   0.017,
+   0.021,
+   0.045,
+   0.024
+  ],
+  "pins_outside_box_xy": [],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ },
+ "restart": {
+  "name": "zz-audit-smoke-restart",
+  "mode": "free",
+  "status": "completed",
+  "n_save": 6,
+  "lys_resids": [
+   4,
+   14,
+   24,
+   34
+  ],
+  "total_steps_meta": "12000",
+  "wall_seconds": "19.59",
+  "events_kk": 4,
+  "events_surface": 8,
+  "events_surface_initial": 4,
+  "kinds": [
+   "intra",
+   "surface"
+  ],
+  "frame_conv_old(round(step/n_save))": false,
+  "frame_conv_new(round(step/n_save)-1)": true,
+  "event_times_ps": [
+   2.0,
+   38.0,
+   45.0,
+   66.0,
+   70.0,
+   72.0,
+   81.0,
+   162.0
+  ],
+  "summary": {
+   "formed": 4,
+   "intra": 4,
+   "inter": 0,
+   "surface": 8,
+   "sf_init": 4,
+   "sf_run": 4,
+   "steps": 18000
+  },
+  "frames": 3000,
+  "n_frames_planned_meta": "2000",
+  "n_frames_saved_meta": "3000",
+  "nan_in_dcd": false,
+  "min_z": 0.11568174511194229,
+  "max_z": 12.460776329040527,
+  "min_z_last_frame": 1.4243916273117065,
+  "box": [
+   10.0,
+   10.0,
+   50.0
+  ],
+  "frac_beads_below_wall_z1.9": 0.063,
+  "frac_beads_below_z0": 0.0,
+  "mean_rg_nm": 1.756,
+  "mean_rg_last_half_nm": 1.459,
+  "kk_last_frame_dist_nm": [
+   0.632,
+   0.633,
+   0.58,
+   0.64
+  ],
+  "surface_last_frame_off_pin_nm": [
+   0.058,
+   0.045,
+   0.026,
+   0.049,
+   0.051,
+   0.05,
+   0.066,
+   0.07
+  ],
+  "pins_outside_box_xy": [
+   [
+    "3.2969",
+    "-0.2735"
+   ]
+  ],
+  "statedata_log_bytes": 0,
+  "pe_trace": "EMPTY (logfreq=1e6 > steps)",
+  "fails": []
+ }
+}

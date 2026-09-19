@@ -52,3 +52,5 @@ coverage.xml
 docs/_build/
 
 .DS_Store
+# Audit scratch simulations (branch robust-audit) — CPU smoke tests, not results
+simulations/zz-audit-*

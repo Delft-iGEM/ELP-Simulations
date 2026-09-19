@@ -31,9 +31,13 @@ energy and can spike the temperature to NaN, so the stiffness is ramped in over
 ``crosslink_ramp_steps``.
 
 The pair list is O(n^2) in the number of reactive sites: 64 sites (16 chains x 4
-lysines) is 2016 bonds, which is nothing. Above roughly 500 sites (125k bonds)
-this needs replacing with a pair set restricted at setup by a generous distance
-cutoff — you get a warning at that point.
+lysines) is 2016 bonds, and the block-runs batch (16 chains x 16 lysines = 256
+sites) is 32640 — a few hundred kB of bond parameters, re-uploaded whole by
+``updateParametersInContext`` a handful of times per reaction, which is nothing
+next to a 1000-step chunk of MD. Intra-chain pairs closer than ``min_span``
+residues are left out (they can never be a meaningful loop). Above roughly 500
+sites (125k bonds) this needs replacing with a pair set restricted at setup by
+a generous distance cutoff — you get a warning at that point.
 
 What the numbers mean, and what they don't
 ------------------------------------------
@@ -109,6 +113,15 @@ PAIR_WARN_SITES = 500
 # x, y, z is the pin). `origin` is "initial" for a bond the run started with
 # and "run" for one it formed. Consumers that read by column name are
 # unaffected by the extra column; a movie script should skip pymol_j when blank.
+#
+# `frame` is the 0-based index of the saved frame nearest the event, as mdtraj
+# and MDAnalysis number frames. OpenMM's DCDReporter writes its first frame
+# after `n_save` steps, not at step 0, so frame k holds step (k + 1) * n_save
+# and an event at MD step s is nearest frame round(s / n_save) - 1. A bond
+# present at initialisation (step 0) predates every frame and is put on
+# frame 0. PyMOL states are 1-based: state = frame + 1 (the pymol_i / pymol_j
+# bead indices are already 1-based). `time_ps` is exact (step x 0.01 ps) and is
+# what the tooling sorts and filters on; `frame` is only for movies.
 CSV_COLUMNS = [
     "frame", "time_ps", "resid_i", "chain_i", "resid_j", "chain_j",
     "kind", "span", "x", "y", "z", "pymol_i", "pymol_j", "origin",
@@ -140,6 +153,17 @@ class CrosslinkSettings:
     selection: tuple[int, ...] | None = None   # explicit bead indices, or None
     start_step: int = 0             # ignore reactions before this step
     seed: int | None = None         # reaction RNG seed (None -> from the run's)
+    # Minimum |residue_i - residue_j| for two sites on the SAME chain to be a
+    # candidate pair. Neighbouring CA beads sit one bond length (0.38 nm) apart
+    # and i, i+2 at most 0.76 nm, both inside any sensible reaction distance
+    # (0.5-1.2 nm), so with min_span <= 2 a sequence such as ...KK... would
+    # "crosslink" at the first check for no reason but the backbone, using up
+    # valence that a real bifunctional crosslinker could not: it cannot bridge
+    # two lysines whose side chains are held side by side into a loop that
+    # constrains anything. Pairs closer than min_span along the chain are not
+    # even dormant bonds. Inter-chain pairs are never affected. 0 keeps every
+    # pair (the behaviour before this setting existed).
+    min_span: int = 3
 
     def __post_init__(self) -> None:
         if self.distance is None or self.distance <= 0:
@@ -163,6 +187,8 @@ class CrosslinkSettings:
             raise ValueError("crosslink_ramp_steps cannot be negative.")
         if self.start_step < 0:
             raise ValueError("crosslink_start_step cannot be negative.")
+        if self.min_span < 0:
+            raise ValueError("crosslink_min_span cannot be negative.")
 
     @property
     def distance_angstrom(self) -> float:
@@ -171,7 +197,8 @@ class CrosslinkSettings:
     def banner(self) -> str:
         """The startup line. Prints both units so nm/A cannot be mixed up."""
         return (f"crosslinking: ON, reaction distance {self.distance:.2f} nm "
-                f"({self.distance_angstrom:.1f} A), valence {self.valence}, p={self.prob}")
+                f"({self.distance_angstrom:.1f} A), valence {self.valence}, p={self.prob}, "
+                f"min intra-chain span {self.min_span} residues")
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -180,6 +207,9 @@ class CrosslinkSettings:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CrosslinkSettings":
+        """Build from a crosslink.yaml / state-file dict. Keys added since the file
+        was written (e.g. ``min_span``) fall back to their defaults, unknown keys
+        are ignored, so old files still load."""
         known = {f: data[f] for f in cls.__dataclass_fields__ if f in data}
         selection = known.get("selection")
         if selection is not None:
@@ -320,6 +350,18 @@ def min_image_distances(pos: np.ndarray, idx_i: np.ndarray, idx_j: np.ndarray,
     return np.linalg.norm(d, axis=1)
 
 
+def frame_of_step(step: int, n_save: int) -> int:
+    """0-based index of the saved frame nearest MD step `step`.
+
+    DCDReporter writes frame k at step (k + 1) * n_save (its first report comes
+    after n_save steps, not at step 0), so this is round(step / n_save) - 1,
+    floored at 0 for events that predate the first frame.
+    """
+    if not n_save:
+        return 0
+    return max(0, int(round(step / n_save)) - 1)
+
+
 @dataclass
 class CrosslinkEvent:
     step: int
@@ -356,8 +398,17 @@ class Crosslinker:
         # Upper-triangle pair list, in a fixed order: pairs[b] is the pair
         # belonging to bond index b, and that order has to be reproducible
         # because a restart rebuilds the force from scratch and re-applies the
-        # saved reacted flags by bond index.
+        # saved reacted flags by bond index. Pairs on one chain closer than
+        # `min_span` residues are dropped here, so they are not even dormant
+        # bonds (see CrosslinkSettings.min_span); save_state records a hash of
+        # the resulting list so a state written with a different one is refused.
         slot_a, slot_b = np.triu_indices(n, k=1)
+        chain = np.array([s.chain for s in sites], dtype=int)
+        res = np.array([s.res_in_chain for s in sites], dtype=int)
+        too_close = (chain[slot_a] == chain[slot_b]) & \
+            (np.abs(res[slot_a] - res[slot_b]) < settings.min_span)
+        self.n_pairs_dropped_by_span = int(too_close.sum())
+        slot_a, slot_b = slot_a[~too_close], slot_b[~too_close]
         self.pair_slot_a = slot_a
         self.pair_slot_b = slot_b
         bead = np.array([s.index for s in sites], dtype=int)
@@ -377,6 +428,17 @@ class Crosslinker:
     @property
     def n_pairs(self) -> int:
         return len(self.pair_bead_i)
+
+    @property
+    def pairs_hash(self) -> str:
+        """Fingerprint of the bond list (bead i, bead j per bond index). Two
+        Crosslinkers with the same hash number their bonds identically."""
+        import hashlib
+
+        h = hashlib.sha1()
+        h.update(np.ascontiguousarray(self.pair_bead_i, dtype=np.int64).tobytes())
+        h.update(np.ascontiguousarray(self.pair_bead_j, dtype=np.int64).tobytes())
+        return h.hexdigest()
 
     def add_force(self, system) -> Any:
         """Add every pair as a dormant (zero-stiffness) harmonic bond.
@@ -411,20 +473,24 @@ class Crosslinker:
             return 1.0
         return min(1.0, max(0.0, (step - formed_at) / self.settings.ramp_steps))
 
-    def advance_ramps(self, step: int) -> bool:
-        """Push every ramping bond to the stiffness its age entitles it to."""
+    def _set_bond(self, bond: int, k: float) -> None:
+        """Set bond `bond` to stiffness `k` (kJ/mol/nm^2) in the force object; the
+        Context sees it after updateParametersInContext."""
         from openmm.unit import kilojoule_per_mole, nanometer
 
+        self.force.setBondParameters(int(bond), int(self.pair_bead_i[bond]),
+                                     int(self.pair_bead_j[bond]),
+                                     self.settings.r0 * nanometer,
+                                     k * kilojoule_per_mole / nanometer ** 2)
+
+    def advance_ramps(self, step: int) -> bool:
+        """Push every ramping bond to the stiffness its age entitles it to."""
         if not self.ramping:
             return False
-        r0 = self.settings.r0 * nanometer
-        unit_k = kilojoule_per_mole / nanometer ** 2
         done = []
         for b in list(self.ramping):
             frac = self._ramp_fraction(b, step)
-            self.force.setBondParameters(int(b), int(self.pair_bead_i[b]),
-                                         int(self.pair_bead_j[b]), r0,
-                                         frac * self.settings.k * unit_k)
+            self._set_bond(int(b), frac * self.settings.k)
             if frac >= 1.0:
                 done.append(b)
         for b in done:
@@ -486,9 +552,20 @@ class Crosslinker:
             self.used[b_slot] += 1
             if self.force is not None:
                 # Post-hoc replay has no force to ramp; only a live run does.
+                # Write the bond's starting stiffness now rather than waiting
+                # for the next advance_ramps: with ramp_steps > 0 that is 0
+                # (unchanged), but with ramp_steps = 0 — "switch on at once" —
+                # it is the full k, and leaving it to the next chunk would
+                # silently delay the bond by up to check_every steps.
                 self.ramping[int(b)] = step
+                self._set_bond(int(b), self.settings.k * self._ramp_fraction(int(b), step))
             i, j = self.pair_bead_i[b], self.pair_bead_j[b]
-            midpoint = 0.5 * (pos[i] + pos[j])
+            # Midpoint of the minimum-image pair, not of the raw coordinates: the
+            # positions come unwrapped (enforcePeriodicBox=False) and a pair that
+            # met across the boundary would otherwise be marked mid-box.
+            dij = pos[i] - pos[j]
+            dij -= box_lengths * np.round(dij / box_lengths)
+            midpoint = pos[j] + 0.5 * dij
             self.events.append(CrosslinkEvent(
                 step=step, site_a=int(a_slot), site_b=int(b_slot),
                 distance=float(dist),
@@ -511,6 +588,10 @@ class Crosslinker:
             "seed": int(self.seed),
             "settings": self.settings.to_dict(),
             "site_beads": [int(i) for i in self.site_beads],
+            # The bond list itself, fingerprinted: `reacted` is a list of bond
+            # indices and means nothing under a different pair list.
+            "n_pairs": int(self.n_pairs),
+            "pairs_hash": self.pairs_hash,
             "reacted": np.flatnonzero(self.reacted).tolist(),
             "used": self.used.tolist(),
             "ramping": {str(int(b)): int(t) for b, t in self.ramping.items()},
@@ -541,6 +622,24 @@ class Crosslinker:
                 "Delete the runtime folder and start over rather than restarting into a "
                 "network that means something else."
             )
+        # Same sites is necessary but not sufficient: the bond indices in
+        # `reacted` also depend on which pairs were kept (min_span). A state
+        # file from before the hash existed was written with every pair kept,
+        # so it is compatible exactly when this Crosslinker dropped nothing.
+        saved_hash = payload.get("pairs_hash")
+        n_all = len(self.site_beads) * (len(self.site_beads) - 1) // 2
+        if saved_hash is not None:
+            same_pairs = saved_hash == self.pairs_hash
+        else:
+            same_pairs = int(payload.get("n_pairs", n_all)) == self.n_pairs == n_all
+        if not same_pairs:
+            saved_span = payload.get("settings", {}).get("min_span", 0)
+            raise ValueError(
+                f"{STATE_FILENAME} was written for a different bond list "
+                f"({payload.get('n_pairs', n_all)} pairs, min_span {saved_span}) than this run "
+                f"builds ({self.n_pairs} pairs, min_span {self.settings.min_span}), so its bond "
+                "indices would be reapplied to the wrong pairs. Restart with the same "
+                "crosslink_min_span, or delete the runtime folder and start over.")
         saved_settings = payload.get("settings", {})
         for key in ("distance", "valence", "r0", "k"):
             if key in saved_settings and saved_settings[key] != getattr(self.settings, key):
@@ -552,13 +651,25 @@ class Crosslinker:
         self.reacted[np.array(payload["reacted"], dtype=int)] = True
         self.used = np.array(payload["used"], dtype=int)
         self.events = [CrosslinkEvent.from_dict(e) for e in payload.get("events", [])]
+        # `used` is derivable from `reacted`; if the two disagree the file is
+        # corrupt (or hand-edited) and the valence bookkeeping would be wrong
+        # for the rest of the run. Refuse rather than carry on.
+        counts = np.bincount(self.pair_slot_a[self.reacted], minlength=len(self.used)) + \
+            np.bincount(self.pair_slot_b[self.reacted], minlength=len(self.used))
+        if len(self.used) != len(self.site_beads) or not np.array_equal(counts, self.used):
+            raise ValueError(f"{STATE_FILENAME} is inconsistent: per-site bond counts from "
+                             f"'reacted' do not match 'used'. The file is corrupt; do not restart "
+                             "from it.")
+        if len(self.events) != int(self.reacted.sum()):
+            raise ValueError(f"{STATE_FILENAME} is inconsistent: {len(self.events)} events but "
+                             f"{int(self.reacted.sum())} reacted bonds.")
         step = int(payload.get("step", 0))
-        # A bond caught mid-ramp resumes from the stiffness it had reached, so a
-        # restart neither re-spikes it nor leaves it soft forever.
-        self.ramping = {}
-        for b, formed_at in payload.get("ramping", {}).items():
-            elapsed = max(0, step - int(formed_at))
-            self.ramping[int(b)] = step - elapsed
+        # A bond caught mid-ramp resumes from the stiffness it had reached:
+        # `ramping` stores the step it formed at, and _ramp_fraction(b, step)
+        # measured from there is the fraction it had reached, so the value is
+        # kept as is (clamped to the save step in case of a corrupt file).
+        self.ramping = {int(b): min(int(formed_at), step)
+                        for b, formed_at in payload.get("ramping", {}).items()}
         # Re-seed from (seed, step) rather than replaying the draws the
         # pre-checkpoint reactions consumed: a plain default_rng(seed) here would
         # hand the restarted run the identical random stream it already used.
@@ -577,8 +688,9 @@ class Crosslinker:
             intra = a.chain == b.chain
             # The frame a movie should flash on, not the MD step: reactions are
             # checked more often than frames are saved, so round to the nearest
-            # saved frame.
-            frame = int(round(event.step / n_save)) if n_save else 0
+            # saved frame — 0-based, and frame k holds step (k + 1) * n_save
+            # (see the CSV_COLUMNS comment).
+            frame = frame_of_step(event.step, n_save)
             x, y, z = event.midpoint
             rows.append({
                 "frame": frame,
@@ -611,7 +723,11 @@ class Crosslinker:
             writer.writerows(self.event_rows(n_save))
         return path
 
-    def summary_lines(self, n_save: int, steps_done: int) -> list[str]:
+    def summary_lines(self, n_save: int, steps_done: int,
+                      pinned: np.ndarray | None = None) -> list[str]:
+        """The summary text. `pinned` (per slot, from the SurfaceBinder) marks
+        lysines bonded to the surface, which can never crosslink; the conversion
+        is then also given against the sites that were actually available."""
         rows = self.event_rows(n_save)
         n = len(rows)
         intra = [r for r in rows if r["kind"] == "intra"]
@@ -619,19 +735,39 @@ class Crosslinker:
         spans = sorted(int(r["span"]) for r in intra)
         n_sites = len(self.sites)
         capacity = n_sites * self.settings.valence
+        n_pinned = int(np.sum(pinned)) if pinned is not None else 0
+        n_avail = n_sites - n_pinned
+        capacity_avail = n_avail * self.settings.valence
 
         lines = [
             f"crosslink summary — written {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
             "",
             f"steps simulated:       {steps_done}",
             f"reactive sites:        {n_sites}",
-            f"candidate pairs:       {self.n_pairs}",
+            f"candidate pairs:       {self.n_pairs}"
+            + (f"  ({self.n_pairs_dropped_by_span} intra-chain pairs closer than "
+               f"{self.settings.min_span} residues excluded)" if self.n_pairs_dropped_by_span else ""),
             f"crosslinks formed:     {n}",
             # Conversion is per *site*: each bond consumes one valence slot at
             # each end, so 2 x events out of n_sites x valence available slots.
             f"conversion:            {2 * n / capacity:.4f}  (2 x events / (sites x valence))"
             if capacity else "conversion:            n/a",
             f"saturated sites:       {int(np.sum(self.used >= self.settings.valence))} of {n_sites}",
+        ]
+        if pinned is not None:
+            # A surface-bonded lysine is out of the pool for good, so the
+            # all-sites conversion above understates how far the *available*
+            # sites got. Both are reported; say which one you quote.
+            lines += [
+                f"surface-bonded sites:  {n_pinned} of {n_sites} (cannot crosslink; end of run)",
+                f"conversion (available): {2 * n / capacity_avail:.4f}  "
+                f"(2 x events / ((sites - surface-bonded) x valence))"
+                if capacity_avail else "conversion (available): n/a",
+                f"saturated (available): "
+                f"{int(np.sum((self.used >= self.settings.valence) & ~np.asarray(pinned, dtype=bool)))} "
+                f"of {n_avail}",
+            ]
+        lines += [
             "",
             f"intra-chain (loops):   {len(intra)}"
             + (f"  ({len(intra) / n:.3f} of all events)" if n else ""),
@@ -662,6 +798,7 @@ class Crosslinker:
             f"k:               {self.settings.k} kJ/mol/nm^2",
             f"r0:              {self.settings.r0} nm",
             f"ramp_steps:      {self.settings.ramp_steps}",
+            f"min_span:        {self.settings.min_span} residues (intra-chain)",
             f"selection:       {'auto (lysines)' if self.settings.selection is None else 'explicit'}",
             f"reaction seed:   {self.seed}",
         ]
@@ -678,17 +815,23 @@ class Crosslinker:
         self.write_summary(runtime_dir, n_save, steps_done)
 
 
-def _chunk_sizes(remaining: int, check_every: int, ramp_steps: int, ramping: bool) -> int:
+def _chunk_sizes(remaining: int, check_every: int, ramp_steps: int, ramping: bool,
+                 until: "tuple[int, ...] | list[int]" = ()) -> int:
     """How far to step before stopping to update bond parameters.
 
     Normally one check interval. While a bond is mid-ramp, smaller steps, so the
     ramp is resolved over several parameter updates instead of jumping to full
-    stiffness at the next check (see RAMP_UPDATES).
+    stiffness at the next check (see RAMP_UPDATES). `until` lists the steps
+    left to the next scheduled stops (next reaction check per reactor, next
+    checkpoint): the chunk never runs past any of them, otherwise a check due
+    at step N would be made at the first stop after N — up to check_every - 1
+    steps late, and every later check would inherit the delay.
     """
     chunk = check_every
     if ramping and ramp_steps > 0:
         chunk = min(chunk, max(1, ramp_steps // RAMP_UPDATES))
-    return min(chunk, remaining)
+    chunk = min(chunk, remaining, *until)
+    return max(1, chunk)
 
 
 def _reaction_seed(settings: CrosslinkSettings, sim) -> int:
@@ -726,7 +869,8 @@ def write_event_record(runtime_dir: Path, n_save: int, steps_done: int,
 
     lines: list[str] = []
     if xl is not None:
-        lines += xl.summary_lines(n_save, steps_done)
+        lines += xl.summary_lines(n_save, steps_done,
+                                  pinned=sb.pinned if sb is not None else None)
     else:
         lines += [f"crosslink summary — written "
                   f"{datetime.now(timezone.utc).isoformat(timespec='seconds')}",
@@ -900,6 +1044,17 @@ def run_reactive(sim, settings: CrosslinkSettings | None, runtime_dir: Path | No
         print(f"Reading check point file {fcheck_in}")
         print(f"Appending trajectory to {path}/{sim.sysname:s}.dcd")
         simulation.loadCheckpoint(fcheck_in)
+        # The checkpoint and the network state(s) are written one after the
+        # other; a kill in between leaves coordinates from one step and bonds
+        # from another. currentStep comes from the checkpoint itself, so the
+        # three can be compared — and a mismatch is a wrong network, not a
+        # warning.
+        for name, reactor in (("crosslink", xl), ("surface", sb)):
+            if reactor is not None and reactor.resume_step != simulation.currentStep:
+                raise RuntimeError(
+                    f"{name} state was saved at step {reactor.resume_step} but the checkpoint "
+                    f"{fcheck_in} is at step {simulation.currentStep}. They do not belong "
+                    "together; restore a matching pair or start over.")
     else:
         if sim.restart == "pdb":
             print(f"Reading in system configuration {sim.frestart}")
@@ -948,36 +1103,48 @@ def run_reactive(sim, settings: CrosslinkSettings | None, runtime_dir: Path | No
             xl.save_state(runtime_dir, step)
         if sb is not None:
             sb.save_state(runtime_dir, step)
-        write_event_record(runtime_dir, n_save, done, xl, sb, n_chains)
+        # `step` (the simulation's own counter, restart segments included), not
+        # `done`: the events span the whole trajectory, so "steps simulated"
+        # must too.
+        write_event_record(runtime_dir, n_save, step, xl, sb, n_chains)
 
     print("STARTING SIMULATION", flush=True)
     done = 0
     with tqdm(total=total, mininterval=1) as bar:
         while done < total:
             ramping = bool(xl is not None and xl.ramping) or bool(sb is not None and sb.ramping)
-            chunk = _chunk_sizes(total - done, check_every, ramp_steps, ramping)
-            chunk = max(1, min(chunk, next_checkpoint - done))
+            step = simulation.currentStep
+            until = [next_checkpoint - done] + \
+                [nc - step for nc in (next_check_xl, next_check_sb) if nc is not None]
+            chunk = _chunk_sizes(total - done, check_every, ramp_steps, ramping, until)
             simulation.step(chunk)
             done += chunk
             step = simulation.currentStep
 
+            # A check that falls due is always consumed (next_check advanced),
+            # whether or not start_step has been reached; otherwise the chunk
+            # clipping above would stop every single step until start_step.
             if sb is not None:
                 changed = sb.advance_ramps(step)
-                if step >= next_check_sb and step >= surface.start_step:
-                    # Surface first: a lysine that binds the surface this check
-                    # is not available to crosslink in the same check.
-                    changed |= sb.check_reactions(simulation.context, step,
-                                                  blocked=(xl.used > 0) if xl is not None else None)
+                if step >= next_check_sb:
                     next_check_sb = step + surface.check_every
+                    if step >= surface.start_step:
+                        # Surface first: a lysine that binds the surface this
+                        # check is not available to crosslink in the same check.
+                        changed |= sb.check_reactions(
+                            simulation.context, step,
+                            blocked=(xl.used > 0) if xl is not None else None)
                 if changed:
                     sb.force.updateParametersInContext(simulation.context)
 
             if xl is not None:
                 changed = xl.advance_ramps(step)
-                if step >= next_check_xl and step >= settings.start_step:
-                    changed |= xl.check_reactions(simulation.context, step,
-                                                  blocked=sb.pinned if sb is not None else None)
+                if step >= next_check_xl:
                     next_check_xl = step + settings.check_every
+                    if step >= settings.start_step:
+                        changed |= xl.check_reactions(
+                            simulation.context, step,
+                            blocked=sb.pinned if sb is not None else None)
                 if changed:
                     xl.force.updateParametersInContext(simulation.context)
 
@@ -1083,11 +1250,31 @@ def post_hoc_events(traj_path: Path, top_path: Path, settings: CrosslinkSettings
             if row.get("kind") != "surface":
                 continue
             slot = by_key.get((int(row["chain_i"]), int(row["resid_i"])))
-            if slot is not None:
-                bound_at[slot] = min(bound_at[slot], float(row["time_ps"]) / DT_PS)
+            if slot is None:
+                # A surface row naming a lysine this topology does not have is
+                # never harmless: skipping it silently would let the replay
+                # crosslink a lysine the live run had already bonded to the
+                # surface — exactly the "bonded to the ground AND to another
+                # lysine" state this masking exists to prevent. It means the
+                # events file and the trajectory are not from the same run
+                # (regenerated topology, hand-edited CSV), so stop.
+                known = sorted(by_key)
+                raise ValueError(
+                    f"surface event for chain {row['chain_i']} resid {row['resid_i']} matches no "
+                    f"lysine in {top_path} (it has {known[:8]}{'...' if len(known) > 8 else ''}). "
+                    f"The events file and the trajectory are not from the same run; replaying "
+                    f"them together would crosslink a surface-bonded lysine."
+                )
+            # time_ps is step x 0.01 rounded; divide back and round to the
+            # integer step, or float error (e.g. 1000000.0000000001) could
+            # leave the lysine unblocked at the very frame it bound.
+            bound_at[slot] = min(bound_at[slot], int(round(float(row["time_ps"]) / DT_PS)))
 
     for frame in range(traj.n_frames):
-        step = frame * n_save
+        # DCDReporter writes frame k at step (k + 1) * n_save — the first frame
+        # is n_save steps in, not step 0 — so this is the step the live run's
+        # start_step and surface-bond times must be compared against.
+        step = (frame + 1) * n_save
         if step < settings.start_step:
             continue
         xl.react(np.asarray(traj.xyz[frame], dtype=np.float64),

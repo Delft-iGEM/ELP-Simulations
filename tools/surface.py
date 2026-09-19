@@ -90,6 +90,8 @@ from typing import Any, Sequence
 import numpy as np
 from yaml import safe_dump, safe_load
 
+from tools.crosslink import frame_of_step
+
 # Written by prepare.py next to the trajectory; read by run.py. Its absence is
 # what makes a run "brush", exactly as the absence of crosslink.yaml makes a run
 # non-reactive.
@@ -397,9 +399,13 @@ def _build_chain_grid(n_beads: int, pins: Sequence[int], hmax: int) -> tuple[np.
     `pins` are bead indices (within the chain) that must sit at h = 0.
     """
     p = COLUMN_PITCH
-    pins = sorted(int(i) for i in pins)
+    pins = sorted(set(int(i) for i in pins))
     if not pins:
         raise ValueError("a chain needs at least one pinned lysine")
+    if pins[0] < 0 or pins[-1] >= n_beads:
+        # Otherwise this surfaces as an AssertionError on the path length,
+        # which says nothing about the site that caused it.
+        raise ValueError(f"pinned bead index out of range for a {n_beads}-bead chain: {pins}")
 
     # Slot offset of each pin: 0 = on a column slot, 1 = one unit past it. Set
     # by the parity of the segment leading to it (a Manhattan path between two
@@ -553,9 +559,19 @@ def check_geometry(pos: np.ndarray, pin_beads: Sequence[int], pin_xyz: np.ndarra
     # boundary — handled by boxsize on the lateral axes.
     from scipy.spatial import cKDTree
 
+    # The z axis is periodic too, but no *false* overlap can hide across it:
+    # the checks above guarantee every bead is >= z_floor (2.5 nm) above the
+    # bottom and >= 1 nm below the top, so the closest pair across the z
+    # boundary is > 3.5 nm apart, far outside min_sep. Passing 4 x the height
+    # as the z period makes the tree treat z as effectively non-periodic while
+    # still accepting the coordinates (cKDTree needs 0 <= x < boxsize on every
+    # periodic axis; z is in [z_floor, box_z - 1] so it qualifies).
     lateral = np.array([box[0], box[1]], dtype=float)
     wrapped = pos.copy()
     wrapped[:, :2] = np.mod(wrapped[:, :2], lateral)
+    # np.mod(-tiny, L) rounds to exactly L, which cKDTree rejects as outside
+    # the box; fold that edge back to 0.
+    wrapped[:, :2] = np.where(wrapped[:, :2] >= lateral, 0.0, wrapped[:, :2])
     tree = cKDTree(wrapped, boxsize=[box[0], box[1], box[2] * 4.0])
     pairs = tree.query_pairs(min_sep, output_type="ndarray")
     n_close = int(len(pairs))
@@ -866,10 +882,21 @@ class SurfaceBinder:
             self.pinned[int(s)] = True
             self.pin_xyz[int(s)] = payload["pin_xyz"][str(int(s))]
         self.events = [SurfaceEvent.from_dict(e) for e in payload.get("events", [])]
+        if len(self.events) != self.n_pinned:
+            raise ValueError(f"{STATE_FILENAME} is inconsistent: {len(self.events)} surface events "
+                             f"but {self.n_pinned} pinned lysines. Do not restart from it.")
         step = int(payload.get("step", 0))
-        self.ramping = {int(s): int(t) for s, t in payload.get("ramping", {}).items()}
+        self.ramping = {int(s): min(int(t), step) for s, t in payload.get("ramping", {}).items()}
         self.cap_reached_step = payload.get("cap_reached_step")
-        self.n_max = int(payload.get("n_max", 0))
+        if "n_max" in payload:
+            self.n_max = int(payload["n_max"])
+        else:
+            # A state file from before n_max was saved. 0 would mean "cap
+            # reached" and silently stop all binding, so recompute it; every
+            # chain has a lysine (check_capacity enforced that at t = 0), so the
+            # chain count is the highest chain index + 1.
+            self.n_max = check_capacity(self.settings, int(self.chain_of_site.max()) + 1,
+                                        self.n_sites)
         self.rng = np.random.default_rng([self.seed, step])
         self.resume_step = step
         return step
@@ -881,7 +908,9 @@ class SurfaceBinder:
         rows = []
         for e in self.events:
             a = self.sites[e.site]
-            frame = int(round(e.step / n_save)) if n_save else 0
+            # 0-based nearest saved frame; an initial bond (step 0) predates the
+            # first frame and goes on frame 0 — see CSV_COLUMNS in tools.crosslink.
+            frame = frame_of_step(e.step, n_save)
             x, y, z = e.pin
             rows.append({
                 "frame": frame,
@@ -974,6 +1003,7 @@ def summarize_event_rows(rows: list[dict[str, Any]], n_chains: int | None = None
         "chains_with_2": int(hist[2]),
         "chains_with_3plus": int(hist[3:].sum()),
         "chains_with_0": int(hist[0]),
-        "last_run_bond_step": max((float(r["time_ps"]) / DT_PS for r in surface
+        # time_ps is step x 0.01 rounded to 6 places; round back to the integer step.
+        "last_run_bond_step": max((int(round(float(r["time_ps"]) / DT_PS)) for r in surface
                                    if r.get("origin") == "run"), default=None),
     }

@@ -535,7 +535,8 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
         Field("ionic_strength_M", config.get("ionic", ""), "M", "Ionic strength (Debye screening)"),
         Field("pH", config.get("pH", ""), "", "pH used for residue charges"),
         Field("z_wall_nm", _z_wall_from_expr(config.get("ext_force_expr")), "nm",
-              "Depth of the surface-attachment potential well"),
+              "Onset height of the repulsive surface wall (the z in step(z_wall - z)); beads "
+              "below it are pushed up"),
         Field("ext_force_expr", config.get("ext_force_expr", ""), "", "External (surface) potential"),
         Field("cutoff_lj_nm", config.get("cutoff_lj", ""), "nm", "Ashbaugh-Hatch cutoff"),
         Field("cutoff_yu_nm", config.get("cutoff_yu", ""), "nm", "Yukawa (electrostatics) cutoff"),
@@ -573,19 +574,32 @@ def _read_job_settings(runtime_dir: Path) -> dict[str, str]:
 
 
 def parse_slurm_time(value: str) -> float:
-    """SLURM D-HH:MM:SS / HH:MM:SS / MM -> seconds. NaN if it isn't a duration."""
+    """SLURM --time -> seconds, with SLURM's meaning. NaN if it isn't a duration.
+
+    sbatch(1) accepts MM, MM:SS, HH:MM:SS, D-HH, D-HH:MM and D-HH:MM:SS. A
+    two-field "H:MM" is minutes:seconds to the scheduler (not hours:minutes),
+    and that is how it is read here, so walltime_used_fraction compares the
+    measured time against the limit SLURM actually enforced.
+    """
     text = (value or "").strip()
     if not text:
         return math.nan
-    if text.isdigit():
-        return int(text) * 60
-    match = re.fullmatch(r"(?:(\d+)-)?(\d+):([0-5]?\d)(?::([0-5]?\d))?", text)
+    match = re.fullmatch(
+        r"(?:(?P<days>\d+)-(?P<dh>\d+)(?::(?P<dm>[0-5]?\d))?(?::(?P<ds>[0-5]?\d))?"
+        r"|(?P<a>\d+)(?::(?P<b>[0-5]?\d))?(?::(?P<c>[0-5]?\d))?)", text)
     if not match:
         return math.nan
-    days, first, second, third = match.groups()
-    hours, minutes, seconds = (int(first), int(second), int(third or 0)) if third is not None \
-        else (int(first), int(second), 0)
-    return ((int(days or 0) * 24 + hours) * 60 + minutes) * 60 + seconds
+    g = match.groupdict()
+    if g["days"] is not None:
+        days, hours = int(g["days"]), int(g["dh"])
+        minutes, seconds = int(g["dm"] or 0), int(g["ds"] or 0)
+    elif g["c"] is not None:
+        days, hours, minutes, seconds = 0, int(g["a"]), int(g["b"]), int(g["c"])
+    elif g["b"] is not None:
+        days, hours, minutes, seconds = 0, 0, int(g["a"]), int(g["b"])
+    else:
+        days, hours, minutes, seconds = 0, 0, int(g["a"]), 0
+    return float(((days * 24 + hours) * 60 + minutes) * 60 + seconds)
 
 
 def format_duration(seconds: float) -> str:
