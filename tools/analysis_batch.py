@@ -32,7 +32,7 @@ import csv
 import traceback
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, NamedTuple
 
 from tools.new_simulation import _slugify
 from tools.run_batch import _norm_header, _sniff_delimiter
@@ -40,6 +40,20 @@ from tools.run_batch import _norm_header, _sniff_delimiter
 SIMULATIONS = Path("simulations")
 DEFAULT_NOTEBOOK = "analyze.ipynb"
 ANALYSIS_TAG = "analysis"
+
+# A second tag names the step a cell performs, so a batch can run part of the
+# section: {"tags": ["analysis", "step:equilibration"]}. Steps a cell needs
+# first are declared the same way, {"tags": [..., "needs:zdist"]}, next to the
+# cell rather than in a table here that would drift out of date. `only` pulls
+# those in for you, so asking for one step can never run it against variables
+# the skipped step was supposed to define.
+STEP_PREFIX = "step:"
+NEEDS_PREFIX = "needs:"
+
+# The step that loads the trajectory. Every other cell reads what it defines
+# (u, chains, box, mode, ...), so it always runs, whatever is selected —
+# selecting around it would only produce NameErrors.
+LOADER_STEP = "load"
 
 
 class SkipRest(Exception):
@@ -224,9 +238,18 @@ def resolve_targets(target: Any, quiet: bool = False) -> list[str]:
     return found
 
 
-def analysis_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
-                   tag: str = ANALYSIS_TAG) -> list[tuple[int, str]]:
-    """``(cell number, source)`` for every code cell tagged ``tag`` in the notebook.
+class _Cell(NamedTuple):
+    """One tagged analysis cell: where it is, what it does, what it needs first."""
+
+    index: int                  # cell number in the notebook, for error messages
+    source: str
+    step: str | None            # from a "step:<name>" tag, None if untagged
+    needs: tuple[str, ...]      # from "needs:<name>" tags
+
+
+def _read_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
+                tag: str = ANALYSIS_TAG) -> list[_Cell]:
+    """Every code cell tagged ``tag``, with its step name and declared needs.
 
     Read off disk, so the batch runs the *saved* version of the cells: save the
     notebook after editing an analysis cell, then run the batch.
@@ -236,11 +259,124 @@ def analysis_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
     path = Path(notebook)
     if not path.is_file():
         raise FileNotFoundError(f"{path} does not exist — pass the notebook's path explicitly")
-    cells = json.loads(path.read_text())["cells"]
+    out: list[_Cell] = []
+    for index, cell in enumerate(json.loads(path.read_text())["cells"]):
+        tags = cell.get("metadata", {}).get("tags") or []
+        if cell["cell_type"] != "code" or tag not in tags:
+            continue
+        steps = [t[len(STEP_PREFIX):] for t in tags if t.startswith(STEP_PREFIX)]
+        if len(steps) > 1:
+            raise ValueError(f"{path} cell {index} has more than one {STEP_PREFIX!r} tag "
+                             f"({', '.join(steps)}); a cell is one step.")
+        out.append(_Cell(
+            index=index,
+            source="".join(cell["source"]),
+            step=steps[0] if steps else None,
+            needs=tuple(t[len(NEEDS_PREFIX):] for t in tags if t.startswith(NEEDS_PREFIX)),
+        ))
+    return out
+
+
+def list_steps(notebook: str | Path = DEFAULT_NOTEBOOK,
+               tag: str = ANALYSIS_TAG) -> list[str]:
+    """The step names available to `only` / `skip`, in the order they run.
+
+    Prints them with their cell number and what they need, which is the thing
+    you actually want to see before choosing a subset.
+    """
+    cells = _read_cells(notebook, tag)
+    steps: list[str] = []
+    print(f"{'step':<22} {'cell':>5}  needs")
+    for cell in cells:
+        if cell.step is None:
+            print(f"{'(untagged)':<22} {cell.index:>5}  always runs — give it a "
+                  f"{STEP_PREFIX}<name> tag to make it selectable")
+            continue
+        steps.append(cell.step)
+        note = ", ".join(cell.needs) if cell.needs else ""
+        if cell.step == LOADER_STEP:
+            note = (note + "; " if note else "") + "always runs"
+        print(f"{cell.step:<22} {cell.index:>5}  {note}")
+    return steps
+
+
+def _resolve_steps(cells: list[_Cell], only: Iterable[str] | None,
+                   skip: Iterable[str] | None, quiet: bool = False) -> set[str] | None:
+    """Which step names to run, or None for all of them.
+
+    `only` is expanded over `needs:` until it closes, so picking a step that
+    reads another step's variables brings that one along instead of failing
+    with a NameError halfway through twenty runs.
+    """
+    if only is not None and skip is not None:
+        raise ValueError("pass only= or skip=, not both — they would contradict each other.")
+    if only is None and skip is None:
+        return None
+
+    known = {cell.step for cell in cells if cell.step}
+    needs_of = {cell.step: set(cell.needs) for cell in cells if cell.step}
+
+    def check(names: Iterable[str], what: str) -> set[str]:
+        wanted = {str(n).strip() for n in names}
+        for name in sorted(wanted - known):
+            close = get_close_matches(name, sorted(known), n=1)
+            raise ValueError(
+                f"{what}={name!r} is not a step in this notebook"
+                + (f" — did you mean {close[0]!r}?" if close else "")
+                + f"\n  available: {', '.join(sorted(known))}"
+            )
+        return wanted
+
+    if skip is not None:
+        dropped = check(skip, "skip")
+        if LOADER_STEP in dropped:
+            raise ValueError(
+                f"{LOADER_STEP!r} loads the trajectory every other cell reads; it cannot be "
+                f"skipped.")
+        # A step whose need is skipped has to go too, or it runs against
+        # variables that were never defined.
+        chosen = known - dropped
+        while True:
+            broken = {s for s in chosen if needs_of.get(s, set()) - chosen}
+            if not broken:
+                break
+            if not quiet:
+                for s in sorted(broken):
+                    missing = ", ".join(sorted(needs_of[s] - chosen))
+                    print(f"·  also skipping {s!r}: it needs {missing}, which you skipped")
+            chosen -= broken
+        return chosen
+
+    chosen = check(only, "only")
+    added: set[str] = set()
+    while True:
+        extra = set().union(*(needs_of.get(s, set()) for s in chosen)) - chosen
+        if not extra:
+            break
+        added |= extra
+        chosen |= extra
+    if added and not quiet:
+        print(f"·  also running {', '.join(sorted(added))} — needed by what you asked for")
+    chosen.add(LOADER_STEP)
+    return chosen
+
+
+def analysis_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
+                   tag: str = ANALYSIS_TAG,
+                   only: Iterable[str] | None = None,
+                   skip: Iterable[str] | None = None,
+                   quiet: bool = False) -> list[tuple[int, str]]:
+    """``(cell number, source)`` for the tagged cells a batch should run.
+
+    With neither `only` nor `skip`, that is every cell tagged ``tag``, exactly
+    as before. Otherwise it is filtered by the cells' ``step:<name>`` tags —
+    see `list_steps`. A cell with no step tag always runs; so does the loader.
+    """
+    cells = _read_cells(notebook, tag)
+    wanted = _resolve_steps(cells, only, skip, quiet=quiet)
     return [
-        (i, "".join(cell["source"]))
-        for i, cell in enumerate(cells)
-        if cell["cell_type"] == "code" and tag in (cell.get("metadata", {}).get("tags") or [])
+        (cell.index, cell.source) for cell in cells
+        if wanted is None or cell.step is None or cell.step in wanted
     ]
 
 
@@ -248,7 +384,9 @@ def run_for_each(sim_names: Iterable[str],
                  namespace: dict[str, Any],
                  notebook: str | Path = DEFAULT_NOTEBOOK,
                  tag: str = ANALYSIS_TAG,
-                 close_figures: bool = True) -> dict[str, str]:
+                 close_figures: bool = True,
+                 only: Iterable[str] | None = None,
+                 skip: Iterable[str] | None = None) -> dict[str, str]:
     """Run every ``analysis``-tagged cell of the notebook once per simulation.
 
     ``namespace`` is the notebook's own globals (pass ``globals()``), so the
@@ -256,15 +394,28 @@ def run_for_each(sim_names: Iterable[str],
     that raises ends that simulation — the rest of its cells would be reading
     the previous run's variables — and the batch continues with the next name.
     Returns ``{name: "ok"}`` / ``{name: "failed in cell N: ..."}``.
+
+    `only` / `skip` run part of the section, naming the cells' ``step:`` tags —
+    ``only=["equilibration", "crosslinks"]`` or ``skip=["free-end-3d"]``.
+    `list_steps()` prints what is available. The loader always runs, and a step
+    another one needs is pulled in (or dropped with it), so a subset can never
+    execute a cell against variables nothing defined.
     """
     import matplotlib.pyplot as plt
 
-    cells = analysis_cells(notebook, tag)
+    cells = analysis_cells(notebook, tag, only=only, skip=skip)
     if not cells:
         raise RuntimeError(
             f"no code cells tagged {tag!r} in {notebook} — tag the analysis cells "
             f"(cell metadata: {{\"tags\": [\"{tag}\"]}}) and save the notebook first"
+            if only is None and skip is None else
+            f"the {'only' if only is not None else 'skip'} selection left no cells to run"
         )
+    if only is not None or skip is not None:
+        chosen = [c.step for c in _read_cells(notebook, tag)
+                  if (c.index, c.source) in {(i, src) for i, src in cells} and c.step]
+        print(f"running {len(cells)} of {len(_read_cells(notebook, tag))} cells: "
+              f"{', '.join(chosen)}")
 
     names = list(sim_names)
     results: dict[str, str] = {}
