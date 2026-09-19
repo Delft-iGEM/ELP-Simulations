@@ -52,15 +52,25 @@ Branch robust-audit. Entries are appended by several auditors; ids are prefixed 
 
 ## RUN — performance and silent-failure gaps found from the 2026-09-19 batch
 
-* **RUN-1. The reactive loop is 6–9.5x slower than the plain path.** Measured on
-  the block batch: 7988 it/s non-reactive vs 1350 (monoblock) and 841
-  (tetrablock) it/s reactive; 7.43e3 vs 1.02e3 ns/day. Cause: the loop calls
-  `context.getState(getPositions=True)` every `check_every` = 1000 steps, which
-  forces a full GPU→CPU sync of all positions, and `updateParametersInContext`
-  re-uploads all 32 640 bond parameters on every change. Six of the twelve
-  reactive jobs hit their 2 h walltime as a result. Either raise `check_every`
-  (1000 steps = 10 ps is far finer than the chemistry justifies — see LIT-5),
-  or restrict the pair list by a setup-time cutoff, or budget ~3 h.
+* **RUN-1 (CORRECTED 2026-09-19). The reactive loop costs about +26 %, not
+  6-9.5x.** The original figure came from the block batch (841-1350 it/s
+  reactive against 7988 non-reactive) and was an artefact: those reactive runs
+  had diverged to ~1e13 nm, which wrecks the neighbour list. A controlled pair
+  on identical healthy systems (4 chains x 300 residues, 40,000 steps, CPU)
+  gives 300.8 s with crosslinking against 239.3 s without. Component costs on a
+  monoblock-sized system (11,520 beads, 32,640 dormant bonds): MD step 11.0 ms,
+  `getState(getPositions=True)` 0.057 ms, `updateParametersInContext` 0.022 ms.
+  Unmeasured here: on CUDA `getState` forces a device synchronisation, and
+  production has 4.6x more dormant bonds, so the GPU figure is above +26 %.
+  **Do not raise `check_every` to buy speed.** With CALVADOS friction
+  (0.01 /ps) a lysine bead diffuses at 1904 nm^2/ns, 2660x faster than the same
+  bead in water, so a pair crosses a 0.8 nm capture radius in 0.028 ps. The
+  existing 10 ps interval is already ~357 crossing times: the run samples
+  configurations, it does not resolve encounters. Worse, with `prob` = 1.0 the
+  check interval *is* the reaction rate, so raising it changes the result for a
+  purely numerical reason. Decouple them as LAMMPS `fix bond/create` does
+  (https://docs.lammps.org/fix_bond_create.html): keep the interval fine and set
+  `crosslink_prob` < 1 to control the rate, which also matches LIT-5.
 * **RUN-2. Nothing detects a diverged simulation.** OpenMM does not error on
   coordinates of 1e13 nm; the run continues to the end, `metadata.csv` records
   "completed", and only the final PDB write fails — a run killed by walltime

@@ -44,34 +44,44 @@ Sequences, concentration, nmol, steps, crosslink distance, crosslink prob, mode
 and preattached fraction are byte-identical to the first batch. This is a clean
 re-run of the same science on fixed code, not a new experiment.
 
-| runs | residues | walltime was | walltime now |
-| --- | --- | --- | --- |
-| `monoblock-*-xl-v2` | 720 | 2:00:00 | 4:00:00 |
-| `triblock-32-*-xl-v2` | 880 | 2:00:00 | 5:00:00 |
-| `triblock-64-*-xl-v2`, `tetrablock-*-xl-v2` | 1040 | 2:00:00 | 6:00:00 |
+All 12 keep `steps` at 7,070,000 and get `walltime` 3:00:00, up from 2:00:00.
+See below for why that is only a modest rise.
 
-### Why so much more walltime
+### Why 3 h, and why not more
 
-The reactive loop ran 6–9.5x slower than the plain path in the first batch:
-1350 it/s (monoblock) and 841 it/s (tetrablock) against 7988 it/s for the
-non-reactive runs. Six jobs hit the 2 h limit because of it.
+**The first batch's apparent 6-9.5x reactive slowdown was an artefact of the
+divergence, not a cost of crosslinking.** That was measured on runs whose
+coordinates had reached 1e13 nm, which wrecks the neighbour list. Corrected by
+a controlled pair on identical systems, both healthy (4 chains x 300 residues,
+40,000 steps, CPU, 59 crosslinks formed in the reactive one):
 
-Those rates are a **lower bound on the cost of a correct run**. They were
-measured on systems that had already exploded, and a diverged system is cheap
-to integrate: every bead is astronomically far from every other, so the
-neighbour list is empty and the nonbonded terms cost nothing. A healthy
-reactive run does the full nonbonded work *and* the reaction checks, so expect
-it to be slower than 841 it/s, not faster. The walltimes above carry that
-margin. A run that still hits the limit resumes from its checkpoint with its
-network intact (`crosslink_state.json`), so a timeout costs a resubmission, not
-the run.
+| | wall time |
+| --- | --- |
+| with crosslinking | 300.8 s |
+| without crosslinking | 239.3 s |
+| **overhead of the reaction machinery** | **+26 %** |
 
-The slowness itself is not fixed. `docs/GAPS.md` RUN-1 has the cause: the loop
-calls `context.getState(getPositions=True)` every `check_every` = 1000 steps,
-forcing a full GPU→CPU position sync, and `updateParametersInContext`
-re-uploads all 32,640 bond parameters on every change. Raising `check_every`
-is the cheapest lever — 1000 steps is 10 ps, far finer than the chemistry
-justifies (see `docs/LITERATURE.md` LIT-5).
+The bookkeeping is cheap because it is rare and small. Measured on a
+monoblock-sized system (11,520 beads, 32,640 dormant bonds): one MD step costs
+11.0 ms, `getState(getPositions=True)` 0.057 ms, and
+`updateParametersInContext` 0.022 ms.
+
+At +26 % the re-runs should finish in about 16-20 min, from the `*-noxl` runs'
+measured 12.6-15.5 min. 3:00:00 leaves roughly 9-11x margin, which covers the
+two things that measurement cannot: it was on CPU, where `getState` does not
+force the GPU synchronisation it does on CUDA, and it had 7,140 dormant bonds
+against production's 32,640.
+
+If queue turnaround matters more than margin, 1:00:00 is still a 3x margin and
+is defensible. A run that does hit its limit resumes from its checkpoint with
+its network intact (`crosslink_state.json`), so a timeout costs a
+resubmission, not the run.
+
+**Do not raise `crosslink_check_every` to buy speed.** It is already 1000 steps
+(10 ps) and it is not where the time goes. It is also, with `crosslink_prob`
+at 1.0, acting as the reaction rate: check less often and you get fewer
+crosslinks because you looked less, not because the chemistry changed. The
+physical argument is in `docs/GAPS.md` RUN-1.
 
 ## Before you submit — two open decisions
 
