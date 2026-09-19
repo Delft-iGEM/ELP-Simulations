@@ -1,0 +1,6 @@
+16 chains x 880 residues/chain, box = [ 282.84  282.84 1050.  ]
+mode preattached — no fixed anchor: residue 0 is an ordinary residue and each chain hangs from its surface-bonded lysine(s): 102 bonds at t=0, 0 formed during the run (102 of 256 lysines). Reference bead per chain = its first initial pin.
+periodic wrapping: 27680 whole-molecule wrap events in this trajectory (reference-bead movement after unwrapping: 16992265241.4884 Å — a tethered lysine only jiggles about its pin)
+reference beads sit at z = -1548568253.2 Å on average
+box height 1050 Å: highest bead ever at z = 20887390650368 Å (mean per-frame maximum 11403640438784 Å), headroom -20887390649318 Å
+!  headroom is under the 40 Å nonbonded cutoff: the tallest beads interacted with the periodic image of the grafted layer during this run. Treat brush-height and top-of-brush results with suspicion and rerun with a taller box (box_height in Shared / --box-height).

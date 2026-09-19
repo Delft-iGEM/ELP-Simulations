@@ -1,0 +1,13 @@
+simulation:        triblock-64-free-noxl
+trajectory:        1010 frames, 16 chains x 1040 residues, 70.70 ns total
+
+         equilibrated after   correlation time   N_eff       plateau (nm)    drift
+Rg                 14.35 ns            3.19 ns      18   10.539 +/- 0.088     1.7σ
+RMSD                3.78 ns            3.44 ns      19   13.303 +/- 0.135     2.9σ
+
+burn-in to discard: 205 frames (14.35 ns) = 20% of the run — the later of the two
+
+⚠  equilibrated, but only 18 independent samples of the slowest observable — averages are usable with caution and error bars will be wide.
+
+next run of this sequence: ~35,848,000 steps (358.47 ns) for N_eff = 100 — longer than the 7,070,000 steps this run used.
+   (burn-in 14.35 ns + 100 x 3.44 ns; longer chains and tighter spacings relax more slowly, so re-check per sequence.)

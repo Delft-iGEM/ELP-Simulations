@@ -1,0 +1,6 @@
+16 chains x 880 residues/chain, box = [ 282.84  282.84 1050.  ]
+mode brush — anchored end: residue index 0 (mean z=-28959356063697.5 Å); free end: residue index -1 (mean z=-1730957138.8 Å)
+periodic wrapping: 27552 whole-molecule wrap events in this trajectory (reference-bead movement after unwrapping: 64803125067778.8984 Å — grafted anchors cannot move)
+reference beads sit at z = -28959356063697.5 Å on average
+box height 1050 Å: highest bead ever at z = 138374954352640 Å (mean per-frame maximum 61205662138368 Å), headroom -138374954351590 Å
+!  headroom is under the 40 Å nonbonded cutoff: the tallest beads interacted with the periodic image of the grafted layer during this run. Treat brush-height and top-of-brush results with suspicion and rerun with a taller box (box_height in Shared / --box-height).
