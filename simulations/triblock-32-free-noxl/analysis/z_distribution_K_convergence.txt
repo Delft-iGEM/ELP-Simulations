@@ -1,0 +1,1 @@
+'K' z-distribution looks stable (TV distance <= 0.05) from frame 46/410 onward.

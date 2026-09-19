@@ -1,0 +1,11 @@
+tetrablock-pre-xl: mode preattached
+  lysines:              256 (16 per chain x 16 chains)
+  surface-bonded:       102  = 0.398 of all lysines
+    at t=0:             102
+    formed in the run:  0
+  chains with 1 bond:   0
+  chains with 2 bonds:  0
+  chains with 3+ bonds: 16
+  bonds per chain:      min 4, mean 6.38, max 9
+  global cap:           0.5 of all lysines = 128 bonds (binding during the run was off)
+  -> most chains are held at three or more points: this is a coating.

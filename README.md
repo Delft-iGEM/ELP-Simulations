@@ -503,6 +503,60 @@ sequence actually needs. Both observables are there because they fail
 differently: a chain reaches its final size long before it has forgotten the
 conformation it started in.
 
+### What the run actually crosslinked
+
+Two different questions, two cells, and they do not give the same answer:
+
+* **Contacts** — how often two crosslinkable residues came within
+  `contact_cutoff` of each other, split intra-chain vs inter-chain, per pair and
+  in total. That is the *opportunity* to react, and it is defined even for a run
+  with no chemistry switched on.
+* **Bonds formed** — what the run's reactor actually committed to, read from
+  `runtime/crosslink_events.csv`. K–K crosslinks split into **intra-chain**
+  (loops inside one polymer) and **inter-chain** (bridges, the ones that build a
+  network), lysine–surface bonds split into the ones present at t = 0 and the
+  ones formed during the run, how many of the system's lysines that consumed and
+  how many are still free, plus how many chains ended up bridged to another and
+  the largest connected group. Four plots: cumulative bonds over time, formation
+  rate, the lysine budget, and network growth. A run with no
+  `crosslink_events.csv` says so and plots nothing.
+
+Bond *times* are not kinetics — see the caveats in `tools/crosslink.py` and
+`tools/surface.py`. The counts and the intra/inter split are the meaningful part.
+
+### Analyzing a whole CSV at once
+
+The Analyze section is pointed at its target by `ANALYZE`, at the top of the
+section. It takes one simulation name, a runs CSV (`block-runs.csv`,
+`used-runs.csv`, ...), a pattern like `triblock-64-*`, or a list mixing them:
+
+```python
+ANALYZE = "block-runs.csv"
+sim_names = resolve_targets(ANALYZE)
+```
+
+Names out of a CSV are slugified the same way `create_simulation` slugifies them
+when it makes the folder, so `My_ELP 2` finds `simulations/my-elp-2/`. A name
+that still doesn't match — a row renamed after it was planned, one that was
+never submitted, one whose job hasn't written a trajectory yet — is printed with
+the closest folder that *does* exist and dropped:
+
+```
+19 of 20 run(s) from block-runs.csv can be analyzed
+   !  skipping monoblock-free-xl2: no simulations/monoblock-free-xl2/ folder — closest folder that does exist: monoblock-free-xl
+   !  skipping tetrablock-pre-xl: no .dcd in runtime/ yet — still queued or running?
+```
+
+One missing ELP never costs you the rest of the batch. Work through the section
+once on the first run, then the **last cell of the section** re-runs every cell
+tagged `analysis` for each of the others in turn, each writing into its own
+`simulations/<name>/analysis/`. The cells are read from the notebook *on disk*,
+so save it after editing one. A run whose cells raise is reported and abandoned
+— the batch carries on with the next name rather than analyzing it with the
+previous run's trajectory still loaded — and a run that simply has nothing to
+analyze (a sequence with no lysines, for the crosslink cells) is noted, not
+counted as a failure. `tools/analysis_batch.py` has the machinery.
+
 ### Shell autocomplete
 
 Install completion once (detects your shell automatically — bash, zsh, fish, or PowerShell):

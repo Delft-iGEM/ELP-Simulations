@@ -1,0 +1,1 @@
+triblock-64-brush-xl: mode brush — no lysine-surface bonds (residue 0 is the fixed anchor).
