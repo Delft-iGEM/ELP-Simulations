@@ -468,3 +468,71 @@ def build_workbook(names: list[str], path: str | Path) -> Path:
     path = Path(path)
     wb.save(path)
     return path
+
+
+# ---------------------------------------------------------------------------
+# A flat CSV of the contact statistics
+# ---------------------------------------------------------------------------
+
+CONTACT_CSV_COLUMNS = [
+    ("run", lambda r: r.name),
+    ("family", lambda r: r.family),
+    ("residues_per_chain", lambda r: r.get("eq_residues")),
+    ("concentration_chains_nm2", lambda r: r.get("concentration")),
+    ("preattached_fraction", lambda r: r.get("preattached_fraction")),
+    ("cutoff_A", lambda r: r.get("cutoff_A")),
+    ("frames_analysed", lambda r: r.get("frames_analysed")),
+    ("frames_total", lambda r: r.get("frames_total")),
+    ("first_frame", lambda r: r.get("from_frame")),
+    ("pairs_intra", lambda r: r.get("pairs_intra")),
+    ("pairs_inter", lambda r: r.get("pairs_inter")),
+    ("pairs_dropped_both_pinned", lambda r: r.get("pairs_pinned_dropped")),
+    ("hits_intra", lambda r: r.get("hits_intra")),
+    ("hits_inter", lambda r: r.get("hits_inter")),
+    ("inter_share_of_hits", lambda r: _share(r.get("hits_inter"), r.get("hits_intra"))),
+    ("hits_per_frame_intra", lambda r: r.get("hits_per_frame_intra")),
+    ("hits_per_frame_inter", lambda r: r.get("hits_per_frame_inter")),
+    ("p_pair_intra", lambda r: r.get("p_intra")),
+    ("p_pair_inter", lambda r: r.get("p_inter")),
+    ("p_intra_over_p_inter", lambda r: _ratio(r.get("p_intra"), r.get("p_inter"))),
+    ("pairs_ever_in_contact_intra", lambda r: r.get("ever_intra")),
+    ("pairs_ever_in_contact_inter", lambda r: r.get("ever_inter")),
+    ("closest_intra_A", lambda r: r.get("closest_intra_A")),
+    ("closest_inter_A", lambda r: r.get("closest_inter_A")),
+]
+
+
+def write_contacts_csv(names: list[str], path: str | Path, *,
+                       delimiter: str = ";", decimal: str = ",") -> Path:
+    """One row per run of contact statistics.
+
+    The defaults are the European spreadsheet convention — ``;`` between fields
+    and ``,`` inside numbers — because that is what the rest of this project's
+    CSVs use and what a Dutch-locale Excel expects. It matters more than it
+    looks: open a dot-decimal file in such an Excel and the dot is read as a
+    *thousands* separator, so ``10.0`` becomes 100 and ``0.04`` becomes 4. Every
+    number in the file is then silently wrong, with nothing to show for it.
+
+    Pass ``delimiter=","`` and ``decimal="."`` for the US/pandas convention
+    (``pd.read_csv`` with no arguments).
+    """
+    rows = [collect(name) for name in names]
+    rows.sort(key=lambda r: (r.family, r.get("concentration") or 0,
+                             r.get("preattached_fraction") or 0, r.name))
+
+    def cell(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float):
+            # repr, not a fixed format: these span 1e-05 to 1e5 and rounding to a
+            # fixed number of decimals would flatten the small probabilities to 0.
+            return repr(value).replace(".", decimal) if decimal != "." else repr(value)
+        return str(value)
+
+    path = Path(path)
+    with path.open("w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f, delimiter=delimiter)
+        writer.writerow([name for name, _ in CONTACT_CSV_COLUMNS])
+        for row in rows:
+            writer.writerow([cell(getter(row)) for _, getter in CONTACT_CSV_COLUMNS])
+    return path
