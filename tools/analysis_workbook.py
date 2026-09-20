@@ -108,12 +108,13 @@ def split_name(name: str) -> tuple[str, str, str]:
     like ``triblock-32`` that contain a hyphen of their own. Trailing tags are
     stripped first: a version (``-v3``) and a concentration marker
     (``-c010`` = 0.010 chains/nm^2) and a preattached-fraction marker
-    (``-f30`` = 0.3 of all lysines pinned), in any order and any number,
+    (``-f30`` = 0.3 of all lysines pinned) and a run-length marker
+    (``-t600`` = 600 ns), in any order and any number,
     so adding a tag to a run name does not cost it its family.
     """
     stem = name
     while True:
-        stripped = re.sub(r"-(?:v\d+|c\d+|f\d+)$", "", stem)
+        stripped = re.sub(r"-(?:v\d+|c\d+|f\d+|t\d+)$", "", stem)
         if stripped == stem:
             break
         stem = stripped
