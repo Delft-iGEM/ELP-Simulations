@@ -1,0 +1,5 @@
+16 chains x 880 residues/chain, box = [ 200.  200. 1050.]
+mode preattached — no fixed anchor: residue 0 is an ordinary residue and each chain hangs from its surface-bonded lysine(s): 77 bonds at t=0, 0 formed during the run (77 of 256 lysines). Reference bead per chain = its first initial pin.
+periodic wrapping: 367 whole-molecule wrap events in this trajectory (reference-bead movement after unwrapping: 1.9258 Å — a tethered lysine only jiggles about its pin)
+reference beads sit at z = 25.0 Å on average
+box height 1050 Å: highest bead ever at z = 528 Å (mean per-frame maximum 373 Å), headroom 522 Å
