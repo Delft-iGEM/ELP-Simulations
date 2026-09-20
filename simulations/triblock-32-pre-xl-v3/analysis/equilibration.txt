@@ -1,0 +1,13 @@
+simulation:        triblock-32-pre-xl-v3
+trajectory:        2857 frames, 16 chains x 880 residues, 199.99 ns total
+
+         equilibrated after   correlation time   N_eff       plateau (nm)    drift
+Rg                 36.12 ns            1.45 ns     113    5.036 +/- 0.013     2.1σ
+RMSD               26.18 ns            2.18 ns      80    5.046 +/- 0.019     2.9σ
+
+burn-in to discard: 516 frames (36.12 ns) = 18% of the run — the later of the two
+
+⚠  2.9σ of drift remains after the cut — a slow mode is still relaxing. Treat the plateau values as provisional.
+
+next run of this sequence: ~25,408,000 steps (254.08 ns) for N_eff = 100 — longer than the 19,999,000 steps this run used.
+   (burn-in 36.12 ns + 100 x 2.18 ns; longer chains and tighter spacings relax more slowly, so re-check per sequence.)

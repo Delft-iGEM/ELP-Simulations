@@ -1,0 +1,13 @@
+simulation:        tetrablock-pre-xl-v3
+trajectory:        2857 frames, 16 chains x 1040 residues, 199.99 ns total
+
+         equilibrated after   correlation time   N_eff       plateau (nm)    drift
+Rg                  0.00 ns            1.99 ns     100    5.810 +/- 0.019     1.7σ
+RMSD               46.06 ns            1.61 ns      96    6.084 +/- 0.019     1.7σ
+
+burn-in to discard: 658 frames (46.06 ns) = 23% of the run — the later of the two
+
+✓  equilibrated after 46.06 ns, with 96 independent samples to average over.
+
+next run of this sequence: ~24,529,000 steps (245.29 ns) for N_eff = 100 — longer than the 19,999,000 steps this run used.
+   (burn-in 46.06 ns + 100 x 1.99 ns; longer chains and tighter spacings relax more slowly, so re-check per sequence.)

@@ -1,0 +1,10 @@
+triblock-32-pre-noxl-v3: bonds actually formed (mode preattached, 2857 frames, 199.9 ns)
+  lysines in the system:      256  (16 chains x 16)
+  K–K crosslinks:             0   using 0 lysines (0.0%)
+     intra-chain (loops):     0
+     inter-chain (bridges):   0
+  K–surface bonds (ground):   102   using 102 lysines (39.8%)
+     present at t=0:          102
+     formed during the run:   0
+  lysines still unreacted:    154  (60.2%)
+  chains bridged to another:  0 of 16, largest connected group 0 chains

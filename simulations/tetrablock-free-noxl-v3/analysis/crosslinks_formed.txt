@@ -1,0 +1,11 @@
+tetrablock-free-noxl-v3: bonds actually formed (mode free, 2857 frames, 199.9 ns)
+  lysines in the system:      256  (16 chains x 16)
+  K–K crosslinks:             0   using 0 lysines (0.0%)
+     intra-chain (loops):     0
+     inter-chain (bridges):   0
+  K–surface bonds (ground):   128   using 128 lysines (50.0%)
+     present at t=0:          16
+     formed during the run:   112
+  lysines still unreacted:    128  (50.0%)
+  first bond formed at        9.9 ns (frame 142), last at 18.1 ns (frame 259)
+  chains bridged to another:  0 of 16, largest connected group 0 chains

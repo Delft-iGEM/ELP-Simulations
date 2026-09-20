@@ -1,0 +1,10 @@
+triblock-64-brush-noxl-v3: bonds actually formed (mode brush, 2857 frames, 199.9 ns)
+  lysines in the system:      256  (16 chains x 16)
+  K–K crosslinks:             0   using 0 lysines (0.0%)
+     intra-chain (loops):     0
+     inter-chain (bridges):   0
+  K–surface bonds (ground):   0   using 0 lysines (0.0%)
+     present at t=0:          0
+     formed during the run:   0
+  lysines still unreacted:    256  (100.0%)
+  no crosslink_events.csv in runtime/ — this run had no reactive chemistry (plain brush / crosslinking off), so there is nothing to plot.

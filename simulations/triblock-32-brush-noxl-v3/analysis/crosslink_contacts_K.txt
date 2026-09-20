@@ -1,0 +1,14 @@
+triblock-32-brush-noxl-v3: contacts of ['K'] (LYS) within 14.0 Å
+  beads tracked:    256 (16 per chain x 16 chains)
+  frames analysed:  1436/2857 (from frame 1421)
+  pairs monitored:  1920 intra-chain + 30720 inter-chain = 32640
+
+                           intra-chain   inter-chain
+  hits (pair-frames)             3,815         3,466
+  hits per frame                  2.66          2.41
+  P(pair in contact)           0.00138       0.00008
+  pairs ever in contact       715/1920    2571/30720
+  closest approach (Å)            5.92          5.73
+
+  -> per pair, an intra-chain (same polymer) contact is 17.61x as likely as an inter-chain one.
+  -> but summed over all pairs actually present, 47.6% of all contacts are between different polymers (3,466 of 7,281) — that share is what a bulk crosslinking experiment sees.

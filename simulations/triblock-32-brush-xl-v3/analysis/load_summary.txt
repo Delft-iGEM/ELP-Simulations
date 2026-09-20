@@ -1,0 +1,5 @@
+16 chains x 880 residues/chain, box = [ 326.6  326.6 1050. ]
+mode brush — anchored end: residue index 0 (mean z=20.0 Å); free end: residue index -1 (mean z=201.9 Å)
+periodic wrapping: 0 whole-molecule wrap events in this trajectory (reference-bead movement after unwrapping: 0.0000 Å — grafted anchors cannot move)
+reference beads sit at z = 20.0 Å on average
+box height 1050 Å: highest bead ever at z = 542 Å (mean per-frame maximum 367 Å), headroom 508 Å
