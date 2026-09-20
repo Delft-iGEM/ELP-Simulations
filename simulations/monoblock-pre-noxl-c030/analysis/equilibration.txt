@@ -1,0 +1,13 @@
+simulation:        monoblock-pre-noxl-c030
+trajectory:        2857 frames, 16 chains x 720 residues, 199.99 ns total
+
+         equilibrated after   correlation time   N_eff       plateau (nm)    drift
+Rg                  8.12 ns            3.16 ns      61    6.652 +/- 0.029     0.0σ
+RMSD                9.03 ns            3.01 ns      63    7.983 +/- 0.040     1.0σ
+
+burn-in to discard: 129 frames (9.03 ns) = 5% of the run — the later of the two
+
+✓  equilibrated after 9.03 ns, with 61 independent samples to average over.
+
+next run of this sequence: ~32,515,000 steps (325.14 ns) for N_eff = 100 — longer than the 19,999,000 steps this run used.
+   (burn-in 9.03 ns + 100 x 3.16 ns; longer chains and tighter spacings relax more slowly, so re-check per sequence.)

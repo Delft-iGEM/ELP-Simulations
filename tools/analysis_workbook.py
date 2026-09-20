@@ -105,9 +105,17 @@ def split_name(name: str) -> tuple[str, str, str]:
     """``triblock-64-pre-xl-v3`` -> ('triblock-64', 'preattached', 'on').
 
     The family is whatever precedes the mode, so it keeps working for names
-    like ``triblock-32`` that contain a hyphen of their own.
+    like ``triblock-32`` that contain a hyphen of their own. Trailing tags are
+    stripped first: a version (``-v3``) and a concentration marker
+    (``-c010`` = 0.010 chains/nm^2, used by the density sweeps), in any order,
+    so adding a tag to a run name does not cost it its family.
     """
-    stem = re.sub(r"-v\d+$", "", name)
+    stem = name
+    while True:
+        stripped = re.sub(r"-(?:v\d+|c\d+)$", "", stem)
+        if stripped == stem:
+            break
+        stem = stripped
     match = re.search(r"-(brush|free|pre)-(xl|noxl)$", stem)
     if not match:
         return stem, "", ""

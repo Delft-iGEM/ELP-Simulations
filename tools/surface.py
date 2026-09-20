@@ -112,9 +112,23 @@ BOND_L = 0.38  # nm
 # lengths (1.5 nm) above the tether plane so only the pins and their feet touch
 # it. Columns are capped at BUILD_HEIGHT_NM so a long chain becomes a block of
 # hairpins rather than one spike through the box.
+#
+# That cap sets how WIDE the block is, and the width is what has to fit inside
+# one lattice cell: a shorter cap means more columns side by side. At 10 nm a
+# 1040-residue chain came out 5.32 nm across, which fits a 0.02 chains/nm^2
+# lattice (7.07 nm spacing) but not a dense one — at 0.05 (4.47 nm) the
+# neighbouring constructions interpenetrate and check_geometry refuses the
+# structure with thousands of overlapping pairs.
+#
+# 20 nm brings the same chain to 3.04-3.80 nm across, which fits every density
+# up to 0.05, while the tallest construction reaches only ~22 nm inside boxes
+# that are 85-120 nm high. Nothing about the physics prefers 10: the whole
+# construction is a starting scaffold that minimises and then equilibrates, and
+# for a *dense* brush a tall narrow start is the more realistic one anyway,
+# since that is the shape a crowded grafted layer actually takes.
 COLUMN_PITCH = 2
 FOLD_HEIGHT = 4
-BUILD_HEIGHT_NM = 10.0
+BUILD_HEIGHT_NM = 20.0
 
 # The OpenMM force group the tethers are put in, so their energy can be read on
 # its own and shown to be ~0 at the start.
