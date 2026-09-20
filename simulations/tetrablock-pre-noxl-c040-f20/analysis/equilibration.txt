@@ -1,13 +1,13 @@
 simulation:        tetrablock-pre-noxl-c040-f20
-trajectory:        1786 frames, 16 chains x 1040 residues, 125.02 ns total
+trajectory:        2857 frames, 16 chains x 1040 residues, 199.99 ns total
 
          equilibrated after   correlation time   N_eff       plateau (nm)    drift
-Rg                  7.91 ns            4.42 ns      26    9.167 +/- 0.062     0.3σ
-RMSD               16.38 ns            3.42 ns      32   11.132 +/- 0.066     0.7σ
+Rg                 20.79 ns            7.58 ns      24    9.224 +/- 0.060     1.1σ
+RMSD                0.00 ns           12.12 ns      16   11.067 +/- 0.184     1.6σ
 
-burn-in to discard: 234 frames (16.38 ns) = 13% of the run — the later of the two
+burn-in to discard: 297 frames (20.79 ns) = 10% of the run — the later of the two
 
-⚠  equilibrated, but only 26 independent samples of the slowest observable — averages are usable with caution and error bars will be wide.
+⚠  equilibrated, but only 16 independent samples of the slowest observable — averages are usable with caution and error bars will be wide.
 
-next run of this sequence: ~45,872,000 steps (458.71 ns) for N_eff = 100 — longer than the 19,999,000 steps this run used.
-   (burn-in 16.38 ns + 100 x 4.42 ns; longer chains and tighter spacings relax more slowly, so re-check per sequence.)
+next run of this sequence: ~123,290,000 steps (1232.89 ns) for N_eff = 100 — longer than the 19,999,000 steps this run used.
+   (burn-in 20.79 ns + 100 x 12.12 ns; longer chains and tighter spacings relax more slowly, so re-check per sequence.)
