@@ -107,12 +107,13 @@ def split_name(name: str) -> tuple[str, str, str]:
     The family is whatever precedes the mode, so it keeps working for names
     like ``triblock-32`` that contain a hyphen of their own. Trailing tags are
     stripped first: a version (``-v3``) and a concentration marker
-    (``-c010`` = 0.010 chains/nm^2, used by the density sweeps), in any order,
+    (``-c010`` = 0.010 chains/nm^2) and a preattached-fraction marker
+    (``-f30`` = 0.3 of all lysines pinned), in any order and any number,
     so adding a tag to a run name does not cost it its family.
     """
     stem = name
     while True:
-        stripped = re.sub(r"-(?:v\d+|c\d+)$", "", stem)
+        stripped = re.sub(r"-(?:v\d+|c\d+|f\d+)$", "", stem)
         if stripped == stem:
             break
         stem = stripped
@@ -144,6 +145,10 @@ def parse_contacts(text: str) -> dict[str, Any]:
     out["p_inter"] = _num(_find(r"P\(pair in contact\)\s+[\d.]+\s+([\d.]+)", text))
     out["ever_intra"] = _num(_find(r"pairs ever in contact\s+(\d+)/", text))
     out["ever_inter"] = _num(_find(r"pairs ever in contact\s+\d+/\d+\s+(\d+)/", text))
+    out["pairs_pinned_dropped"] = _num(
+        _find(r"\((\d+) pairs dropped: both lysines surface-bonded", text)) or 0
+    out["pairs_seqsep_dropped"] = _num(
+        _find(r"\((\d+) intra-chain pairs dropped: <", text)) or 0
     out["closest_intra_A"] = _num(_find(r"closest approach \(Å\)\s+([\d.]+)", text))
     out["closest_inter_A"] = _num(_find(r"closest approach \(Å\)\s+[\d.]+\s+([\d.]+)", text))
     return out
@@ -208,6 +213,8 @@ def parse_metadata(runtime: Path) -> dict[str, Any]:
               "n_residues": "meta_residues", "status": "status",
               "spacing_nm": "spacing_nm", "concentration_chains_per_nm2": "concentration",
               "crosslink_distance_nm": "xl_distance_nm", "crosslink_prob": "xl_prob",
+              "surface_preattached_fraction": "preattached_fraction",
+              "surface_max_fraction": "surface_max_fraction",
               "run_wall_seconds": "wall_seconds"}
     out: dict[str, Any] = {}
     with open(path, newline="") as f:
