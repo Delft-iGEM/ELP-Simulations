@@ -109,12 +109,13 @@ def split_name(name: str) -> tuple[str, str, str]:
     stripped first: a version (``-v3``) and a concentration marker
     (``-c010`` = 0.010 chains/nm^2) and a preattached-fraction marker
     (``-f30`` = 0.3 of all lysines pinned) and a run-length marker
-    (``-t600`` = 600 ns), in any order and any number,
+    (``-t600`` = 600 ns) and a bare batch label such as ``-massmatch``,
+    in any order and any number,
     so adding a tag to a run name does not cost it its family.
     """
     stem = name
     while True:
-        stripped = re.sub(r"-(?:v\d+|c\d+|f\d+|t\d+)$", "", stem)
+        stripped = re.sub(r"-(?:v\d+|c\d+|f\d+|t\d+|mm\d+|massmatch)$", "", stem)
         if stripped == stem:
             break
         stem = stripped

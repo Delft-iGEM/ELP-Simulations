@@ -1,0 +1,14 @@
+monoblock-pre-noxl-massmatch: contacts of ['K'] (LYS) within 12.0 Å
+  beads tracked:    256 (16 per chain x 16 chains)
+  frames analysed:  7143/8571 (from frame 1428)
+  pairs monitored:  1841 intra-chain + 29524 inter-chain = 31365  (1275 pairs dropped: both lysines surface-bonded, so their separation is fixed by the construction)
+
+                           intra-chain   inter-chain
+  hits (pair-frames)            13,481        15,039
+  hits per frame                  1.89          2.11
+  P(pair in contact)           0.00103       0.00007
+  pairs ever in contact      1262/1841    6541/29524
+  closest approach (Å)            5.77          5.56
+
+  -> per pair, an intra-chain (same polymer) contact is 14.38x as likely as an inter-chain one.
+  -> but summed over all pairs actually present, 52.7% of all contacts are between different polymers (15,039 of 28,520) — that share is what a bulk crosslinking experiment sees.
