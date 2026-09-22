@@ -660,3 +660,50 @@ def test_crosslink_force_uses_periodic_boundaries():
     # 0.5(2000)(27.5-0.6)^2 = 7.2e5 kJ/mol.
     assert energy == pytest.approx(10.0, abs=1e-3), \
         f"bond energy {energy:.4g} kJ/mol -- evaluated on the raw separation, not the image"
+
+
+# ---------------------------------------------------------------------------
+# Conditional step dependencies in the batch analysis
+# ---------------------------------------------------------------------------
+
+def test_conditional_need_is_waived_when_the_value_is_supplied():
+    """`needs:X?unless=name` drops X when the namespace already defines `name`.
+
+    The contacts step needs the burn-in the equilibration step measures -- but
+    only when it is not told where to start. Passing contact_start_ns supplies
+    that directly, so re-running equilibration costs time and changes nothing.
+    """
+    from tools.analysis_batch import _Cell, _Need, _resolve_steps
+
+    cells = [
+        _Cell(index=0, source="", step="load", needs=()),
+        _Cell(index=1, source="", step="equilibration", needs=()),
+        _Cell(index=2, source="", step="contacts",
+              needs=(_Need("equilibration", "contact_start_ns"),)),
+        _Cell(index=3, source="", step="zdist", needs=(_Need("equilibration"),)),
+    ]
+
+    # nothing supplied: the dependency stands
+    assert _resolve_steps(cells, ["contacts"], None, quiet=True, namespace={}) == \
+        {"load", "equilibration", "contacts"}
+
+    # value supplied: the dependency is waived
+    assert _resolve_steps(cells, ["contacts"], None, quiet=True,
+                          namespace={"contact_start_ns": 100.0}) == {"load", "contacts"}
+
+    # a None value is not "supplied"
+    assert _resolve_steps(cells, ["contacts"], None, quiet=True,
+                          namespace={"contact_start_ns": None}) == \
+        {"load", "equilibration", "contacts"}
+
+    # an unconditional need is unaffected by the same namespace
+    assert _resolve_steps(cells, ["zdist"], None, quiet=True,
+                          namespace={"contact_start_ns": 100.0}) == \
+        {"load", "equilibration", "zdist"}
+
+    # and the guard only applies to the need that declares it
+    assert _Need.parse("equilibration?unless=contact_start_ns") == \
+        _Need("equilibration", "contact_start_ns")
+    assert _Need.parse("zdist") == _Need("zdist", None)
+    with pytest.raises(ValueError):
+        _Need.parse("equilibration?unless=")

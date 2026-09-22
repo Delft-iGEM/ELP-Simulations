@@ -238,13 +238,42 @@ def resolve_targets(target: Any, quiet: bool = False) -> list[str]:
     return found
 
 
+class _Need(NamedTuple):
+    """A step another step depends on, and the condition that waives it.
+
+    ``needs:zdist`` is unconditional. ``needs:equilibration?unless=contact_start_ns``
+    is waived when ``contact_start_ns`` is already set in the namespace the cells
+    will run in — which is how the contacts step declares "I need the measured
+    burn-in, unless you told me where to start". Without that, asking for
+    contacts alone always re-ran equilibration, roughly doubling the time for a
+    result it could not change.
+    """
+
+    step: str
+    unless: str | None = None
+
+    @classmethod
+    def parse(cls, text: str) -> "_Need":
+        step, sep, guard = text.partition("?unless=")
+        if sep and not guard:
+            raise ValueError(f"{NEEDS_PREFIX}{text}: '?unless=' needs a variable name after it")
+        return cls(step.strip(), guard.strip() or None)
+
+    def waived(self, namespace: dict[str, Any] | None) -> bool:
+        return (self.unless is not None and namespace is not None
+                and namespace.get(self.unless) is not None)
+
+    def __str__(self) -> str:
+        return self.step if self.unless is None else f"{self.step} (unless {self.unless})"
+
+
 class _Cell(NamedTuple):
     """One tagged analysis cell: where it is, what it does, what it needs first."""
 
     index: int                  # cell number in the notebook, for error messages
     source: str
     step: str | None            # from a "step:<name>" tag, None if untagged
-    needs: tuple[str, ...]      # from "needs:<name>" tags
+    needs: tuple[_Need, ...]    # from "needs:<name>[?unless=<var>]" tags
 
 
 def _read_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
@@ -272,7 +301,8 @@ def _read_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
             index=index,
             source="".join(cell["source"]),
             step=steps[0] if steps else None,
-            needs=tuple(t[len(NEEDS_PREFIX):] for t in tags if t.startswith(NEEDS_PREFIX)),
+            needs=tuple(_Need.parse(t[len(NEEDS_PREFIX):])
+                        for t in tags if t.startswith(NEEDS_PREFIX)),
         ))
     return out
 
@@ -293,7 +323,7 @@ def list_steps(notebook: str | Path = DEFAULT_NOTEBOOK,
                   f"{STEP_PREFIX}<name> tag to make it selectable")
             continue
         steps.append(cell.step)
-        note = ", ".join(cell.needs) if cell.needs else ""
+        note = ", ".join(str(n) for n in cell.needs) if cell.needs else ""
         if cell.step == LOADER_STEP:
             note = (note + "; " if note else "") + "always runs"
         print(f"{cell.step:<22} {cell.index:>5}  {note}")
@@ -301,12 +331,17 @@ def list_steps(notebook: str | Path = DEFAULT_NOTEBOOK,
 
 
 def _resolve_steps(cells: list[_Cell], only: Iterable[str] | None,
-                   skip: Iterable[str] | None, quiet: bool = False) -> set[str] | None:
+                   skip: Iterable[str] | None, quiet: bool = False,
+                   namespace: dict[str, Any] | None = None) -> set[str] | None:
     """Which step names to run, or None for all of them.
 
     `only` is expanded over `needs:` until it closes, so picking a step that
     reads another step's variables brings that one along instead of failing
     with a NameError halfway through twenty runs.
+
+    A ``?unless=<name>`` need is waived when `namespace` already defines that
+    name, so a dependency that exists only to supply a value is dropped when the
+    value was supplied directly.
     """
     if only is not None and skip is not None:
         raise ValueError("pass only= or skip=, not both — they would contradict each other.")
@@ -314,7 +349,21 @@ def _resolve_steps(cells: list[_Cell], only: Iterable[str] | None,
         return None
 
     known = {cell.step for cell in cells if cell.step}
-    needs_of = {cell.step: set(cell.needs) for cell in cells if cell.step}
+    needs_of: dict[str, set[str]] = {}
+    waived: list[tuple[str, _Need]] = []
+    for cell in cells:
+        if not cell.step:
+            continue
+        live = set()
+        for need in cell.needs:
+            if need.waived(namespace):
+                waived.append((cell.step, need))
+            else:
+                live.add(need.step)
+        needs_of[cell.step] = live
+    if waived and not quiet:
+        for step, need in waived:
+            print(f"·  {step!r} does not need {need.step!r} here: {need.unless} is set")
 
     def check(names: Iterable[str], what: str) -> set[str]:
         wanted = {str(n).strip() for n in names}
@@ -365,7 +414,8 @@ def analysis_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
                    tag: str = ANALYSIS_TAG,
                    only: Iterable[str] | None = None,
                    skip: Iterable[str] | None = None,
-                   quiet: bool = False) -> list[tuple[int, str]]:
+                   quiet: bool = False,
+                   namespace: dict[str, Any] | None = None) -> list[tuple[int, str]]:
     """``(cell number, source)`` for the tagged cells a batch should run.
 
     With neither `only` nor `skip`, that is every cell tagged ``tag``, exactly
@@ -373,7 +423,7 @@ def analysis_cells(notebook: str | Path = DEFAULT_NOTEBOOK,
     see `list_steps`. A cell with no step tag always runs; so does the loader.
     """
     cells = _read_cells(notebook, tag)
-    wanted = _resolve_steps(cells, only, skip, quiet=quiet)
+    wanted = _resolve_steps(cells, only, skip, quiet=quiet, namespace=namespace)
     return [
         (cell.index, cell.source) for cell in cells
         if wanted is None or cell.step is None or cell.step in wanted
@@ -403,7 +453,7 @@ def run_for_each(sim_names: Iterable[str],
     """
     import matplotlib.pyplot as plt
 
-    cells = analysis_cells(notebook, tag, only=only, skip=skip)
+    cells = analysis_cells(notebook, tag, only=only, skip=skip, namespace=namespace)
     if not cells:
         raise RuntimeError(
             f"no code cells tagged {tag!r} in {notebook} — tag the analysis cells "
