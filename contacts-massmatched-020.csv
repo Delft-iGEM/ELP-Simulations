@@ -1,0 +1,9 @@
+﻿run;family;residues_per_chain;concentration_chains_nm2;preattached_fraction;cutoff_A;frames_analysed;frames_total;first_frame;pairs_intra;pairs_inter;pairs_dropped_both_pinned;hits_intra;hits_inter;inter_share_of_hits;hits_per_frame_intra;hits_per_frame_inter;p_pair_intra;p_pair_inter;p_intra_over_p_inter;pairs_ever_in_contact_intra;pairs_ever_in_contact_inter;closest_intra_A;closest_inter_A
+monoblock-brush-noxl-massmatch;monoblock;720;0,02;;12,0;7143;8571;1428;1920;30720;0;10677;12873;0,5466;1,49;1,8;0,00078;6e-05;13,0;1173;8774;5,7;5,62
+monoblock-pre-noxl-massmatch;monoblock;720;0,02;0,2;12,0;7143;8571;1428;1841;29524;1275;13481;15039;0,5273;1,89;2,11;0,00103;7e-05;14,7143;1262;6541;5,77;5,56
+tetrablock-brush-noxl-massmatch;tetrablock;1040;0,014278;;12,0;7143;8571;1428;1920;30720;0;10137;7597;0,4284;1,42;1,06;0,00074;3e-05;24,6667;1077;5807;5,78;5,66
+tetrablock-pre-noxl-massmatch;tetrablock;1040;0,014278;0,2;12,0;7143;8571;1428;1848;29517;1275;11614;7131;0,3804;1,63;1,0;0,00088;3e-05;29,3333;1111;3579;5,53;5,66
+triblock-32-brush-noxl-massmatch;triblock-32;;0,016662;;12,0;7143;8571;1428;1920;30720;0;9467;8754;0,4804;1,33;1,23;0,00069;4e-05;17,25;1014;6374;5,67;5,39
+triblock-32-pre-noxl-massmatch;triblock-32;880;0,016662;0,2;12,0;7143;8571;1428;1850;29515;1275;11863;11587;0,4941;1,66;1,62;0,0009;5e-05;18,0;1220;5203;5,68;5,72
+triblock-64-brush-noxl-massmatch;triblock-64;1040;0,014278;;12,0;7143;8571;1428;1920;30720;0;9463;7108;0,4289;1,32;1,0;0,00069;3e-05;23,0;941;4984;5,58;5,7
+triblock-64-pre-noxl-massmatch;triblock-64;1040;0,014278;0,2;12,0;7143;8571;1428;1855;29510;1275;11786;9712;0,4518;1,65;1,36;0,00089;5e-05;17,8;1231;4615;5,69;5,68
