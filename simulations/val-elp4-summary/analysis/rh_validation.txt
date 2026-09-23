@@ -1,0 +1,12 @@
+ELP4 free-solution validation — Kirkwood-Riseman Rh vs measured
+G(VPGVG)nFC, 293.15 K, 0.020 M, pH 6.5, first 20% discarded
+
+   n   res           Rh sim  Rh exp      dev      Rg  Rg/Rh  N_eff
+  20   103      2.30 +/- 0.01     2.7   -14.9%    2.89   1.26    843
+  30   153      2.81 +/- 0.01     3.4   -17.2%    3.66   1.30    526
+  40   203      3.26 +/- 0.02     3.7   -11.9%    4.32   1.32    317
+  60   303      4.02 +/- 0.03     4.2    -4.3%    5.47   1.36    189
+ 120   603      5.77 +/- 0.06     6.0    -3.8%    7.96   1.38     86
+
+scaling exponent nu: simulated 0.522, measured 0.433
+mean signed deviation -10.4%, RMS 11.8%
