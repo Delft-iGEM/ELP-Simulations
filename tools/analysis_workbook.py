@@ -538,3 +538,67 @@ def write_contacts_csv(names: list[str], path: str | Path, *,
         for row in rows:
             writer.writerow([cell(getter(row)) for _, getter in CONTACT_CSV_COLUMNS])
     return path
+
+
+# ---------------------------------------------------------------------------
+# Sequence architecture: where the reactive residues sit
+# ---------------------------------------------------------------------------
+
+def lysine_architecture(sim_name: str, guest: str = "K") -> dict[str, Any]:
+    """Where the VPGxG guest residues sit along a pentapeptide ELP, and how they group.
+
+    Read from the run's own ``molecules.fasta`` rather than from a table kept
+    alongside, so it cannot drift from what was actually simulated. Anything
+    that is not a VPGxG pentapeptide — a His tag, an RGD insert — is skipped
+    for the position count but reported, because the pentapeptide index is what
+    the design was specified in.
+
+    Returns the guest positions (1-based, counting pentapeptides only), the
+    number of contiguous domains they form, those domains' sizes, and the span
+    from first to last. Domains are what drives contact statistics: four
+    lysines in one block behave nothing like four spread out, even at identical
+    composition.
+    """
+    fasta = SIMULATIONS / sim_name / "runtime" / "molecules.fasta"
+    if not fasta.is_file():
+        return {}
+    seq = fasta.read_text().split("\n")[1]
+
+    pent, i, skipped = [], 0, []
+    while i < len(seq):
+        if seq[i:i + 5].startswith("VPG") and len(seq) - i >= 5:
+            pent.append(seq[i + 3])
+            i += 5
+        else:
+            # a tag or insert: consume to the next VPG
+            nxt = seq.find("VPG", i + 1)
+            nxt = len(seq) if nxt < 0 else nxt
+            skipped.append(seq[i:nxt])
+            i = nxt
+
+    at = [j + 1 for j, g in enumerate(pent) if g == guest]
+    if not at:
+        return {"pentapeptides": len(pent), f"n_{guest}": 0}
+
+    # Split into maximal runs of consecutive positions. Append a *copy* when a
+    # run ends: appending `cur` itself and then clearing it would empty the list
+    # already stored in `runs`, which silently merges the sizes.
+    runs, cur = [], [at[0]]
+    for a, b in zip(at, at[1:]):
+        if b == a + 1:
+            cur.append(b)
+        else:
+            runs.append(list(cur))
+            cur = [b]
+    runs.append(list(cur))
+    sizes = [len(r) for r in runs]
+    return {
+        "pentapeptides": len(pent),
+        f"n_{guest}": len(at),
+        "positions": "+".join(map(str, at)),
+        "domains": len(runs),
+        "domain_sizes": "+".join(map(str, sizes)),
+        "largest_domain": max(sizes),
+        "span": at[-1] - at[0],
+        "inserts": ", ".join(sorted(set(x for x in skipped if x))) or "",
+    }
