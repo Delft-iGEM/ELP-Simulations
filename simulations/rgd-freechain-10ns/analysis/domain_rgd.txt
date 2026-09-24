@@ -1,0 +1,9 @@
+rgd-freechain-10ns: domain RGD (3 residues)
+  4 copy/copies per chain at residue 62-64, 120-122, 178-180, 236-238 of 298, in 1 chain(s)
+  frames analysed:  51/1000 (from 499, stride 10) = 5-10 ns
+  probe radius:     0.14 nm
+
+  SASA per chain (nm^2)           11.87 +/- 0.57
+    fraction of unburied          0.447   (a free domain would be 26.5 nm^2)
+  mean z of the domain (nm)        8.20 +/- 2.74
+    range over the run             2.90 to 12.44
