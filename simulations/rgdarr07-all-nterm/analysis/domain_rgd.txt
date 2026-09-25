@@ -1,0 +1,10 @@
+rgdarr07-all-nterm: domain LDASTVYAVTGRGDSPASSAASA (23 residues)
+  4 copy/copies per chain at residue 5-27, 35-57, 65-87, 95-117 of 352, in 16 chain(s)
+  frames analysed:  536/5714 (from 1428, stride 8) = 100-400 ns
+  probe radius:     0.14 nm
+
+  SASA per chain (nm^2)           78.36 +/- 0.82
+    fraction of unburied          0.402   (a free domain would be 194.8 nm^2)
+  mean z of the domain (nm)        9.92 +/- 0.64
+    range over the run             8.09 to 11.82
+    above the wall onset           8.02   (wall at z = 1.90 nm)
