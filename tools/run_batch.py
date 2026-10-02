@@ -53,11 +53,13 @@ import typer
 from tools.elibpy import build_sequence_with_features, humanize_seq
 from tools.new_simulation import (
     DEFAULT_IONIC_STRENGTH,
+    DEFAULT_TEMPERATURE,
     MIN_BOX_L,
     BoxPlan,
     _project_root,
     _slugify,
     _validate_sequence,
+    check_temperature,
     lattice_positions,
     plan_box,
     plan_steps,
@@ -80,6 +82,7 @@ REGISTRY_COLUMNS = [
     "crosslink_prob",
     "mode",
     "ionic_strength_M",
+    "temperature_K",
     "walltime",
     "submitted_utc",
     "job_id",
@@ -108,6 +111,7 @@ class Shared(NamedTuple):
     mode: str = "brush"                      # brush | free | preattached
     ionic: float = DEFAULT_IONIC_STRENGTH    # M — fallback for the ionic strength column
     surface_preattached_fraction: float | None = None   # preattached: fraction bound at t=0
+    temperature: float = DEFAULT_TEMPERATURE  # K — thermostat; kT only, not the LCST
 
     # ---- never in the CSV: identical for the whole batch ----
     length_measure: str = "contour"
@@ -158,6 +162,7 @@ class RunSpec(NamedTuple):
     mode: str = "brush"             # brush | free | preattached
     surface_preattached_fraction: float | None = None
     ionic: float = DEFAULT_IONIC_STRENGTH   # M
+    temperature: float = DEFAULT_TEMPERATURE    # K
 
 
 class RunPlan(NamedTuple):
@@ -208,6 +213,11 @@ COLUMN_ALIASES: dict[str, str] = {
     "preattached": "surface_preattached_fraction",
     "surface preattached fraction": "surface_preattached_fraction",
     "surface fraction": "surface_preattached_fraction",
+    # Kelvin. "temperature c" is deliberately absent: one column, one unit, and
+    # check_temperature names a Celsius-looking value rather than running it.
+    "temperature": "temperature", "temp": "temperature", "t": "temperature",
+    "temperature k": "temperature", "temp k": "temperature",
+    "thermostat": "temperature", "thermostat temperature": "temperature",
 }
 
 # Cells meaning "not set" — fall back to Shared, exactly as a blank cell does.
@@ -436,6 +446,14 @@ def read_runs(csv_path: str | Path, shared: Shared) -> list[RunSpec]:
             if ionic < 0:
                 raise ValueError(f"row {line_no}: ionic strength must be >= 0 (molar)")
 
+            # Kelvin. check_temperature refuses anything outside the range the
+            # force field was built for, and says so plainly when the number
+            # looks like Celsius — "20" in this column is a 20 K run otherwise.
+            temperature = value("temperature", shared.temperature)
+            if not isinstance(temperature, (int, float)):
+                temperature = _number(temperature, "temperature", line_no)
+            temperature = check_temperature(temperature)
+
             if concentration <= 0:
                 raise ValueError(f"row {line_no}: concentration must be > 0")
             if nmol < 1:
@@ -466,6 +484,7 @@ def read_runs(csv_path: str | Path, shared: Shared) -> list[RunSpec]:
             mode=mode,
             surface_preattached_fraction=None if pre is None else float(pre),
             ionic=float(ionic),
+            temperature=float(temperature),
         ))
 
     if not specs and not problems:
@@ -577,6 +596,11 @@ def print_summary(run: RunPlan, anchor_sigma: float | None = None) -> None:
     print(f"box height:      {plan.l_box_z} nm — the box is periodic in z too, so the brush "
           f"plus the 4 nm cutoff must stay below it; {plan.l_box_z / plan.chain_length:.2f} x "
           f"the contour (finished runs reached 0.16-0.19 x; see z_max_nm in metadata.csv)")
+    if spec.temperature != DEFAULT_TEMPERATURE:
+        print(f"temperature:     {spec.temperature:g} K = {spec.temperature - 273.15:.2f} C — "
+              f"not the {DEFAULT_TEMPERATURE:g} K default. This sets kT and nothing else:")
+        print(f"                 CALVADOS2's hydrophobicity scale has no temperature "
+              f"dependence, so the ELP transition will not appear in a sweep of this.")
     print(f"lattice:         {plan.nx} x {plan.ny} grafting points, {plan.spacing} nm apart")
     if plan.margin:
         print(f"margin:          {plan.margin} nm of empty surface on every side "
@@ -737,9 +761,14 @@ def print_batch_table(runs: list[RunPlan]) -> None:
     walltime to put on one big job, and the maximum is the longest any single
     job would need.
     """
+    # The temperature column only appears when a batch actually varies it. Every
+    # run before the setting existed is at DEFAULT_TEMPERATURE, and a column of
+    # identical numbers would widen an already wide table for nothing.
+    show_temperature = any(r.spec.temperature != DEFAULT_TEMPERATURE for r in runs)
+    temperature_header = f" {'T (K)':>7}" if show_temperature else ""
     header = (f"{'name':<24} {'res':>5} {'nmol':>5} {'chains/nm²':>11} {'spacing':>8} "
               f"{'box (nm)':>21} {'steps':>12} {'ns':>9} {'frames':>7} {'XL':>5} "
-              f"{'mode':>11} {'I (M)':>6} {'walltime':>9}")
+              f"{'mode':>11}{temperature_header} {'I (M)':>6} {'walltime':>9}")
     print(header)
     print("-" * len(header))
     total_seconds = 0
@@ -754,7 +783,8 @@ def print_batch_table(runs: list[RunPlan]) -> None:
         print(f"{spec.name:<24} {len(spec.sequence):>5} {spec.nmol:>5} "
               f"{plan.achieved_concentration:>11.5f} {plan.spacing:>8.3f} "
               f"{f'{plan.l_box_x:g} x {plan.l_box_y:g} x {plan.l_box_z:g}':>21} {run.actual_steps:>12,} "
-              f"{run.total_time_ns:>9.2f} {run.n_frames:>7,} {crosslink:>5} {mode:>11} "
+              f"{run.total_time_ns:>9.2f} {run.n_frames:>7,} {crosslink:>5} {mode:>11}"
+              f"{f' {spec.temperature:>7g}' if show_temperature else ''} "
               f"{spec.ionic:>6g} {spec.walltime:>9}")
     print("-" * len(header))
     longest = max(parse_walltime(r.spec.walltime) for r in runs)
@@ -762,6 +792,10 @@ def print_batch_table(runs: list[RunPlan]) -> None:
           f"walltime; as separate jobs the longest is {format_duration(longest)}")
     print(f"(measured walltimes of finished runs are in each run's "
           f"runtime/metadata.csv: run_wall_seconds / ns_per_hour)")
+    if show_temperature:
+        print(f"T is the Langevin thermostat in kelvin ({DEFAULT_TEMPERATURE:g} K = 20 C is the "
+              f"default). It changes kT only — CALVADOS2 has no temperature-dependent\n"
+              f"hydrophobicity, so a sweep across an ELP's LCST will not show the transition.")
 
 
 # ---------------------------------------------------------------------------
@@ -920,6 +954,7 @@ def record_runs(
                 "steps": _cell(spec.steps),
                 "crosslink_distance_nm": _cell(spec.crosslink_distance),
                 "crosslink_prob": _cell(spec.crosslink_prob),
+                "temperature_K": _cell(spec.temperature),
                 "walltime": spec.walltime,
                 "submitted_utc": now,
                 "job_id": job_id,
@@ -928,11 +963,23 @@ def record_runs(
     return path
 
 
+# What a row written before a column existed should say in it. Only for columns
+# whose old value is *known* rather than merely absent: temperature was a
+# literal 293.15 in the prepare.py template until it became a setting, so every
+# run predating it was at that temperature and a blank would lose that. A
+# column not listed here is left blank, meaning "not recorded" (mode does this:
+# blank reads as brush everywhere already).
+REGISTRY_BACKFILL: dict[str, str] = {
+    "temperature_K": f"{DEFAULT_TEMPERATURE:g}",
+}
+
+
 def _upgrade_registry_columns(path: Path) -> None:
     """Rewrite a registry whose header predates a column, keeping every row.
 
-    Older rows get a blank in the new column (blank mode = brush, which is what
-    they were). Done in place, once, the first time a newer writer appends.
+    Older rows get REGISTRY_BACKFILL's value for the new column where the old
+    behaviour is known, and a blank otherwise. Done in place, once, the first
+    time a newer writer appends.
     """
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -944,7 +991,10 @@ def _upgrade_registry_columns(path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=REGISTRY_COLUMNS, extrasaction="ignore")
         writer.writeheader()
         for row in rows:
-            writer.writerow({key: row.get(key, "") for key in REGISTRY_COLUMNS})
+            writer.writerow({
+                key: row.get(key) or REGISTRY_BACKFILL.get(key, "")
+                for key in REGISTRY_COLUMNS
+            })
 
 
 def spec_from_simulation(sim_dir: Path) -> RunSpec | None:
@@ -993,6 +1043,11 @@ def spec_from_simulation(sim_dir: Path) -> RunSpec | None:
         mode=mode,
         surface_preattached_fraction=float(pre) if pre else None,
         ionic=DEFAULT_IONIC_STRENGTH if math.isnan(ionic) else ionic,
+        # metadata.csv has recorded temperature_K since before this setting
+        # existed, so a run that predates it reports the old hardcoded value
+        # rather than a blank.
+        temperature=(number("temperature_K") if not math.isnan(number("temperature_K"))
+                     else DEFAULT_TEMPERATURE),
     )
 
 
