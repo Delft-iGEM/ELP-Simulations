@@ -52,6 +52,7 @@ import typer
 
 from tools.elibpy import build_sequence_with_features, humanize_seq
 from tools.new_simulation import (
+    DEFAULT_IONIC_STRENGTH,
     DEFAULT_TEMPERATURE,
     TEA_GAMMA,
     MIN_BOX_L,
@@ -81,6 +82,7 @@ REGISTRY_COLUMNS = [
     "crosslink_distance_nm",
     "crosslink_prob",
     "mode",
+    "ionic_strength_M",
     "temperature_K",
     "tea",
     "tea_gamma",
@@ -110,6 +112,7 @@ class Shared(NamedTuple):
     crosslink_distance: float | None = None  # nm; None = no crosslinking
     crosslink_prob: float = 1.0
     mode: str = "brush"                      # brush | free | preattached
+    ionic: float = DEFAULT_IONIC_STRENGTH    # M — fallback for the ionic strength column
     surface_preattached_fraction: float | None = None   # preattached: fraction bound at t=0
     temperature: float = DEFAULT_TEMPERATURE  # K — thermostat; kT only, not the LCST
     tea: bool = False                        # CALVADOS-TEA; off = stock constant lambda
@@ -163,6 +166,7 @@ class RunSpec(NamedTuple):
     row: int                        # line number in the CSV, for error messages
     mode: str = "brush"             # brush | free | preattached
     surface_preattached_fraction: float | None = None
+    ionic: float = DEFAULT_IONIC_STRENGTH   # M
     temperature: float = DEFAULT_TEMPERATURE    # K
     tea: bool = False
     tea_gamma: float = TEA_GAMMA
@@ -210,6 +214,8 @@ COLUMN_ALIASES: dict[str, str] = {
     "runtime": "walltime", "job time": "walltime",
     "mode": "mode", "attachment": "mode", "attachment mode": "mode", "surface mode": "mode",
     "surface": "mode",
+    "ionic strength": "ionic", "ionic": "ionic", "ionic strength m": "ionic",
+    "salt": "ionic", "salt concentration": "ionic", "i": "ionic",
     "preattached fraction": "surface_preattached_fraction",
     "preattached": "surface_preattached_fraction",
     "surface preattached fraction": "surface_preattached_fraction",
@@ -450,6 +456,12 @@ def read_runs(csv_path: str | Path, shared: Shared) -> list[RunSpec]:
                     raise ValueError(f"row {line_no}: mode {mode} attaches chains through "
                                      "lysines, but the sequence has no K")
 
+            ionic = value("ionic", shared.ionic)
+            if not isinstance(ionic, (int, float)):
+                ionic = _number(ionic, "ionic strength", line_no)
+            if ionic < 0:
+                raise ValueError(f"row {line_no}: ionic strength must be >= 0 (molar)")
+
             # Kelvin. check_temperature refuses anything outside the range the
             # force field was built for, and says so plainly when the number
             # looks like Celsius — "20" in this column is a 20 K run otherwise.
@@ -510,6 +522,7 @@ def read_runs(csv_path: str | Path, shared: Shared) -> list[RunSpec]:
             row=line_no,
             mode=mode,
             surface_preattached_fraction=None if pre is None else float(pre),
+            ionic=float(ionic),
             temperature=float(temperature),
             tea=bool(tea),
             tea_gamma=float(tea_gamma),
@@ -715,6 +728,8 @@ def print_summary(run: RunPlan, anchor_sigma: float | None = None) -> None:
     else:
         print("crosslinking:    off — nothing reacts")
 
+    print(f"ionic strength:  {spec.ionic:g} M")
+
     rounded = "" if run.actual_steps == spec.steps else f"  (rounded from {spec.steps:,})"
     print(f"steps:           {run.actual_steps:,}{rounded} = {run.total_time_ns:.3f} ns, "
           f"saving every {run.n_save:,} steps ({run.n_save * DT_PS:.3f} ps)")
@@ -796,7 +811,7 @@ def print_batch_table(runs: list[RunPlan]) -> None:
     temperature_header += f" {'TEA':>5}" if show_tea else ""
     header = (f"{'name':<24} {'res':>5} {'nmol':>5} {'chains/nm²':>11} {'spacing':>8} "
               f"{'box (nm)':>21} {'steps':>12} {'ns':>9} {'frames':>7} {'XL':>5} "
-              f"{'mode':>11}{temperature_header} {'walltime':>9}")
+              f"{'mode':>11}{temperature_header} {'I (M)':>6} {'walltime':>9}")
     def tea_cell(spec):
         return f" {(f'g={spec.tea_gamma:g}' if spec.tea else '-'):>5}"
 
@@ -817,7 +832,7 @@ def print_batch_table(runs: list[RunPlan]) -> None:
               f"{run.total_time_ns:>9.2f} {run.n_frames:>7,} {crosslink:>5} {mode:>11}"
               f"{f' {spec.temperature:>7g}' if show_temperature else ''}"
               f"{tea_cell(spec) if show_tea else ''} "
-              f"{spec.walltime:>9}")
+              f"{spec.ionic:>6g} {spec.walltime:>9}")
     print("-" * len(header))
     longest = max(parse_walltime(r.spec.walltime) for r in runs)
     print(f"{len(runs)} runs — one job back-to-back needs {format_duration(total_seconds)} of "
@@ -983,6 +998,7 @@ def record_runs(
                 "name": spec.name,
                 "sequence": anchor_tagged(spec.sequence, spec.mode),
                 "mode": spec.mode,
+                "ionic_strength_M": _cell(spec.ionic),
                 "n_residues": len(spec.sequence),
                 "concentration_chains_per_nm2": _cell(spec.concentration),
                 "nmol": _cell(spec.nmol),
@@ -1065,6 +1081,7 @@ def spec_from_simulation(sim_dir: Path) -> RunSpec | None:
     distance = meta.get("crosslink_distance_nm", "")
     mode = (meta.get("mode") or "brush").strip() or "brush"
     pre = meta.get("surface_preattached_fraction", "")
+    ionic = number("ionic_strength_M")
     return RunSpec(
         name=sim_dir.name,
         sequence=sequence,
@@ -1079,6 +1096,7 @@ def spec_from_simulation(sim_dir: Path) -> RunSpec | None:
         row=0,
         mode=mode,
         surface_preattached_fraction=float(pre) if pre else None,
+        ionic=DEFAULT_IONIC_STRENGTH if math.isnan(ionic) else ionic,
         # metadata.csv has recorded temperature_K since before this setting
         # existed, so a run that predates it reports the old hardcoded value
         # rather than a blank.
