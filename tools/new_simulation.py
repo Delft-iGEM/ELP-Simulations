@@ -695,7 +695,7 @@ if __name__ == "__main__":
           sysname = sim_name,
           box = box,
           temp = 293.15,
-          ionic = 0.19,
+          ionic = __IONIC__,
           pH = 7.5,
           ext_force = True,
           ext_force_expr = f'step({z_wall}-z)*0.5*{wall_k}*({z_wall}-z)^2',
@@ -768,6 +768,11 @@ if __name__ == "__main__":
 '''
 
 
+# Salt concentration (M) for the Debye-Hueckel screening in CALVADOS. 0.19 is what
+# every run so far used; a run can override it per simulation.
+DEFAULT_IONIC_STRENGTH = 0.19
+
+
 def create_simulation(
     sequence: str,
     concentration: float | None,
@@ -808,6 +813,7 @@ def create_simulation(
     surface_attraction: float = 0.0,
     surface_attraction_width: float = 0.5,
     surface_seed: int | None = None,
+    ionic: float = DEFAULT_IONIC_STRENGTH,
 ) -> Path:
     """Scaffold simulations/<name>/prepare.py and run it. Returns the sim folder.
 
@@ -987,6 +993,7 @@ def create_simulation(
         .replace("__SEQ_NAME__", slug)
         .replace("__SEQUENCE__", seq)
         .replace("__NMOL__", str(nmol))
+        .replace("__IONIC__", repr(float(ionic)))
         .replace("__PLATFORM__", platform)
         .replace("__PARTITION__", partition)
         .replace("__WALLTIME__", walltime)

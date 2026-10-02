@@ -1,0 +1,7 @@
+Name;Sequence;concentration;nmolecules;steps;ionic strength (M);crosslink distance;crosslink prob;mode;preattached fraction;walltime
+ionic-v20-0p05;V20;0.02;16;7070000;0.05;;;brush;;0:40:00
+ionic-v20-0p10;V20;0.02;16;7070000;0.10;;;brush;;0:40:00
+ionic-v20-0p19;V20;0.02;16;7070000;;;;brush;;0:40:00
+ionic-v20-0p50;V20;0.02;16;7070000;0.50;;;brush;;0:40:00
+ionic-k-pre-0p10;K1 V4 K1 V4 K1 V4 K1 V4;0.04;16;7070000;0.10;0.8;1.0;preattached;0.3;1:30:00
+ionic-k-pre-0p19;K1 V4 K1 V4 K1 V4 K1 V4;0.04;16;7070000;0.19;0.8;1.0;preattached;0.3;1:30:00
