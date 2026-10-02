@@ -53,6 +53,7 @@ import typer
 from tools.elibpy import build_sequence_with_features, humanize_seq
 from tools.new_simulation import (
     DEFAULT_TEMPERATURE,
+    TEA_GAMMA,
     MIN_BOX_L,
     BoxPlan,
     _project_root,
@@ -81,6 +82,8 @@ REGISTRY_COLUMNS = [
     "crosslink_prob",
     "mode",
     "temperature_K",
+    "tea",
+    "tea_gamma",
     "walltime",
     "submitted_utc",
     "job_id",
@@ -109,6 +112,8 @@ class Shared(NamedTuple):
     mode: str = "brush"                      # brush | free | preattached
     surface_preattached_fraction: float | None = None   # preattached: fraction bound at t=0
     temperature: float = DEFAULT_TEMPERATURE  # K — thermostat; kT only, not the LCST
+    tea: bool = False                        # CALVADOS-TEA; off = stock constant lambda
+    tea_gamma: float = TEA_GAMMA
 
     # ---- never in the CSV: identical for the whole batch ----
     length_measure: str = "contour"
@@ -159,6 +164,8 @@ class RunSpec(NamedTuple):
     mode: str = "brush"             # brush | free | preattached
     surface_preattached_fraction: float | None = None
     temperature: float = DEFAULT_TEMPERATURE    # K
+    tea: bool = False
+    tea_gamma: float = TEA_GAMMA
 
 
 class RunPlan(NamedTuple):
@@ -212,10 +219,19 @@ COLUMN_ALIASES: dict[str, str] = {
     "temperature": "temperature", "temp": "temperature", "t": "temperature",
     "temperature k": "temperature", "temp k": "temperature",
     "thermostat": "temperature", "thermostat temperature": "temperature",
+    # CALVADOS-TEA. Blank/off = the stock constant-lambda force field.
+    "tea": "tea", "calvados tea": "tea", "temperature dependent": "tea",
+    "temperature dependent lambda": "tea",
+    "tea gamma": "tea_gamma", "gamma": "tea_gamma",
 }
 
 # Cells meaning "not set" — fall back to Shared, exactly as a blank cell does.
 BLANK_VALUES = {"", "-", "none", "n/a", "na", "default", "off"}
+
+# For yes/no columns. "off" is in BLANK_VALUES above and so never reaches
+# these — it falls back to Shared, which defaults to off anyway.
+TRUTHY = {"1", "yes", "y", "true", "t", "on"}
+FALSEY = {"0", "no", "n", "false", "f"}
 
 # SLURM's own grammar (sbatch(1), --time): "minutes", "minutes:seconds",
 # "hours:minutes:seconds", "days-hours", "days-hours:minutes" and
@@ -442,6 +458,29 @@ def read_runs(csv_path: str | Path, shared: Shared) -> list[RunSpec]:
                 temperature = _number(temperature, "temperature", line_no)
             temperature = check_temperature(temperature)
 
+            # CALVADOS-TEA. Off unless a row says otherwise, and a row that says
+            # so at a temperature outside the fit range is refused here rather
+            # than at prepare time, so the whole batch fails before anything is
+            # written.
+            tea = value("tea", shared.tea)
+            if not isinstance(tea, bool):
+                text = str(tea).strip().lower()
+                if text not in TRUTHY | FALSEY:
+                    raise ValueError(f"row {line_no}: tea = {tea!r} is not yes/no "
+                                     f"(use {'/'.join(sorted(TRUTHY))} or leave it blank)")
+                tea = text in TRUTHY
+            tea_gamma = value("tea_gamma", shared.tea_gamma)
+            if not isinstance(tea_gamma, (int, float)):
+                tea_gamma = _number(tea_gamma, "tea gamma", line_no)
+            if tea:
+                from tools.tea import T_MAX as _TEA_MAX, T_MIN as _TEA_MIN
+                if not _TEA_MIN <= temperature <= _TEA_MAX:
+                    raise ValueError(
+                        f"row {line_no}: tea is on at {temperature:g} K, outside TEA's "
+                        f"fitted {_TEA_MIN:g}-{_TEA_MAX:g} K range")
+                if tea_gamma <= 0:
+                    raise ValueError(f"row {line_no}: tea gamma must be positive")
+
             if concentration <= 0:
                 raise ValueError(f"row {line_no}: concentration must be > 0")
             if nmol < 1:
@@ -472,6 +511,8 @@ def read_runs(csv_path: str | Path, shared: Shared) -> list[RunSpec]:
             mode=mode,
             surface_preattached_fraction=None if pre is None else float(pre),
             temperature=float(temperature),
+            tea=bool(tea),
+            tea_gamma=float(tea_gamma),
         ))
 
     if not specs and not problems:
@@ -750,10 +791,15 @@ def print_batch_table(runs: list[RunPlan]) -> None:
     # run before the setting existed is at DEFAULT_TEMPERATURE, and a column of
     # identical numbers would widen an already wide table for nothing.
     show_temperature = any(r.spec.temperature != DEFAULT_TEMPERATURE for r in runs)
+    show_tea = any(r.spec.tea for r in runs)
     temperature_header = f" {'T (K)':>7}" if show_temperature else ""
+    temperature_header += f" {'TEA':>5}" if show_tea else ""
     header = (f"{'name':<24} {'res':>5} {'nmol':>5} {'chains/nm²':>11} {'spacing':>8} "
               f"{'box (nm)':>21} {'steps':>12} {'ns':>9} {'frames':>7} {'XL':>5} "
               f"{'mode':>11}{temperature_header} {'walltime':>9}")
+    def tea_cell(spec):
+        return f" {(f'g={spec.tea_gamma:g}' if spec.tea else '-'):>5}"
+
     print(header)
     print("-" * len(header))
     total_seconds = 0
@@ -769,7 +815,8 @@ def print_batch_table(runs: list[RunPlan]) -> None:
               f"{plan.achieved_concentration:>11.5f} {plan.spacing:>8.3f} "
               f"{f'{plan.l_box_x:g} x {plan.l_box_y:g} x {plan.l_box_z:g}':>21} {run.actual_steps:>12,} "
               f"{run.total_time_ns:>9.2f} {run.n_frames:>7,} {crosslink:>5} {mode:>11}"
-              f"{f' {spec.temperature:>7g}' if show_temperature else ''} "
+              f"{f' {spec.temperature:>7g}' if show_temperature else ''}"
+              f"{tea_cell(spec) if show_tea else ''} "
               f"{spec.walltime:>9}")
     print("-" * len(header))
     longest = max(parse_walltime(r.spec.walltime) for r in runs)
@@ -777,6 +824,10 @@ def print_batch_table(runs: list[RunPlan]) -> None:
           f"walltime; as separate jobs the longest is {format_duration(longest)}")
     print(f"(measured walltimes of finished runs are in each run's "
           f"runtime/metadata.csv: run_wall_seconds / ns_per_hour)")
+    if show_tea:
+        print(f"TEA = CALVADOS-TEA temperature-dependent lambda (g = gamma); '-' is the stock "
+              f"constant-lambda force field.\nA TEA run writes its own residues table into "
+              f"runtime/ and does not touch residues_CALVADOS2.csv.")
     if show_temperature:
         print(f"T is the Langevin thermostat in kelvin ({DEFAULT_TEMPERATURE:g} K = 20 C is the "
               f"default). It changes kT only — CALVADOS2 has no temperature-dependent\n"
@@ -939,6 +990,8 @@ def record_runs(
                 "crosslink_distance_nm": _cell(spec.crosslink_distance),
                 "crosslink_prob": _cell(spec.crosslink_prob),
                 "temperature_K": _cell(spec.temperature),
+                "tea": "on" if spec.tea else "off",
+                "tea_gamma": _cell(spec.tea_gamma) if spec.tea else "",
                 "walltime": spec.walltime,
                 "submitted_utc": now,
                 "job_id": job_id,
@@ -955,6 +1008,7 @@ def record_runs(
 # blank reads as brush everywhere already).
 REGISTRY_BACKFILL: dict[str, str] = {
     "temperature_K": f"{DEFAULT_TEMPERATURE:g}",
+    "tea": "off",
 }
 
 
@@ -1030,6 +1084,9 @@ def spec_from_simulation(sim_dir: Path) -> RunSpec | None:
         # rather than a blank.
         temperature=(number("temperature_K") if not math.isnan(number("temperature_K"))
                      else DEFAULT_TEMPERATURE),
+        tea=(meta.get("tea", "").strip().lower() in TRUTHY),
+        tea_gamma=(number("tea_gamma") if not math.isnan(number("tea_gamma"))
+                   else TEA_GAMMA),
     )
 
 

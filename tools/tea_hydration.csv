@@ -1,0 +1,20 @@
+group,residues,model_compound,du_h_T0_kcal_mol,dh_kcal_mol,dcp_cal_mol_K,fit_mae_kcal_mol
+Ala,A,methane,2.45,0.02,35.30,0.006
+Val/Pro,VP,propane,2.54,-1.13,40.50,0.010
+Leu,L,2-methylpropane,2.90,-1.17,50.49,0.018
+Ile,I,n-butane,2.74,-1.93,62.68,0.012
+Met,M,ethyl methyl thioether,1.03,-3.75,43.66,0.010
+Phe,F,toluene,0.37,-5.71,63.67,0.009
+Cys,C,methanethiol,-0.02,-3.69,39.10,0.009
+Tyr,Y,p-cresol,-4.00,-10.60,41.91,0.012
+Trp,W,3-methylindole,-5.25,-12.94,50.57,0.023
+Ser,S,methanol,-4.38,-8.83,21.47,0.009
+Thr,T,ethanol,-4.24,-10.10,37.74,0.007
+Asn,N,acetamide,-7.53,-13.01,24.54,0.004
+Gln,Q,propionamide,-7.27,-13.80,36.41,0.008
+His,H,4-methylimidazole,-10.55,-18.72,41.86,0.017
+Backbone/Gly,G,N-methylacetamide,-7.15,-14.06,41.81,0.012
+Arg,R,n-propylguanidine,-45.74,-57.99,58.02,0.014
+Lys,K,1-butylamine,-53.54,-62.55,41.93,0.004
+Asp,D,acetic acid,-97.11,-111.95,3.49,0.020
+Glu,E,propionic acid,-97.05,-112.90,4.68,0.012

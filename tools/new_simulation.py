@@ -109,6 +109,11 @@ DEFAULT_TEMPERATURE = 293.15
 MIN_TEMPERATURE = 150.0
 MAX_TEMPERATURE = 500.0
 
+# CALVADOS-TEA's gamma, re-exported so callers configure the feature from one
+# place. The value and the reason for it live in tools/tea.py; TEA is off by
+# default and this is only consulted when a run turns it on.
+TEA_GAMMA = 3.0
+
 # Stiffness of that wall, kJ/mol/nm^2. The wall is CALVADOS's one-sided
 # harmonic CustomExternalForce, step(z_wall-z) * 0.5 * WALL_K * (z_wall-z)^2, and
 # until 2026-09 the expression had no prefactor at all: k = 1 kJ/mol/nm^2, i.e.
@@ -713,6 +718,13 @@ cpu_per_task = "__CPU_PER_TASK__"
 sim_name = Path(__file__).parent.name
 
 box = [__L_X__, __L_Y__, __Z_HEIGHT__]
+temp = __TEMPERATURE__   # K, thermostat; see DEFAULT_TEMPERATURE in tools/new_simulation.py
+
+# CALVADOS-TEA settings, or None for the stock constant-lambda force field.
+# None is the default everywhere and leaves this run identical to the pipeline
+# before the feature existed.
+tea = __TEA__
+
 N_save = __N_SAVE__
 N_frames = __N_FRAMES__
 
@@ -747,7 +759,7 @@ if __name__ == "__main__":
      config = Config(
           sysname = sim_name,
           box = box,
-          temp = __TEMPERATURE__,
+          temp = temp,
           ionic = 0.19,
           pH = 7.5,
           ext_force = True,
@@ -762,13 +774,35 @@ if __name__ == "__main__":
           verbose = True
      )
 
+     # CALVADOS-TEA. `tea` is None for every run that does not ask for it, and
+     # then this is literally the line it always was: the project's own
+     # residues_CALVADOS2.csv, untouched. With TEA on, a residues table for this
+     # run's temperature is written INTO runtime/ and used instead — the shared
+     # file is read, never modified, so a TEA run cannot change what any other
+     # run simulates. See tools/tea.py.
+     fresidues = str(cwd / "residues_CALVADOS2.csv")
+     if tea is not None:
+          from tools.tea import report as _tea_report, write_residues_csv as _write_tea
+          fresidues = str(runtime_dir / "residues_TEA.csv")
+          _lambdas = _write_tea(fresidues, temp, tea["gamma"],
+                                source=cwd / "residues_CALVADOS2.csv")
+          (runtime_dir / "tea.yaml").write_text(
+               "# CALVADOS-TEA, as this run used it. Regenerating prepare.py rewrites it.\\n"
+               f"temperature_K: {temp}\\n"
+               f"gamma: {tea['gamma']}\\n"
+               "T0_K: 300.0\\n"
+               "source_table: residues_CALVADOS2.csv\\n"
+               "lambdas:\\n"
+               + "".join(f"  {k}: {v!r}\\n" for k, v in sorted(_lambdas.items())))
+          print(_tea_report(temp, tea["gamma"]))
+
      components = Components(
           # Defaults
           molecule_type = 'protein',
           nmol = __NMOL__, # number of molecules
           restraint = False,
           charge_termini = 'both',
-          fresidues = str(cwd / "residues_CALVADOS2.csv"),
+          fresidues = fresidues,
           ffasta = str(fasta_file)
      )
 
@@ -828,6 +862,8 @@ def create_simulation(
     steps: int,
     name: str,
     temperature: float = DEFAULT_TEMPERATURE,
+    tea: bool = False,
+    tea_gamma: float = TEA_GAMMA,
     platform: str = "CUDA",
     partition: str = "gpu-a100",
     walltime: str = "24:30:00",
@@ -887,6 +923,13 @@ def create_simulation(
     no temperature-dependent hydrophobicity, so it will not move an ELP through
     its LCST.
 
+    `tea` turns on CALVADOS-TEA (tools/tea.py): lambda is re-evaluated at
+    `temperature` and written to a residues table inside this run's runtime/,
+    which the run then uses instead of the project's residues_CALVADOS2.csv.
+    It is off by default and the shared table is never written, so every run
+    that does not ask for it is bit-for-bit what it was before the feature
+    existed. `tea_gamma` scales the effect; see TEA_GAMMA.
+
     `mode` is how chains attach to the surface: "brush" (default — residue 0 is
     the fixed "Z" anchor, the pipeline exactly as it was), "free" or
     "preattached" (chains hang from surface-bonded lysines; the surface_*
@@ -903,6 +946,16 @@ def create_simulation(
     if platform not in {"CUDA", "CPU"}:
         raise typer.BadParameter("Platform must be 'CUDA' or 'CPU'.")
     temperature = check_temperature(temperature)
+    if tea:
+        from tools.tea import T_MAX as TEA_T_MAX, T_MIN as TEA_T_MIN
+        if not TEA_T_MIN <= temperature <= TEA_T_MAX:
+            raise typer.BadParameter(
+                f"TEA is fitted over {TEA_T_MIN:g}-{TEA_T_MAX:g} K; this run is at "
+                f"{temperature:g} K. Lower the temperature or leave TEA off."
+            )
+        if tea_gamma <= 0:
+            raise typer.BadParameter(f"tea_gamma must be positive, got {tea_gamma!r}.")
+    tea_literal = repr({"gamma": float(tea_gamma)}) if tea else "None"
     if mode not in MODES:
         raise typer.BadParameter(f"mode must be one of {', '.join(MODES)} — got {mode!r}.")
 
@@ -1047,6 +1100,7 @@ def create_simulation(
         .replace("__WALL_K__", str(WALL_K))
         .replace("__Z_ANCHOR__", str(Z_ANCHOR))
         .replace("__TEMPERATURE__", repr(temperature))
+        .replace("__TEA__", tea_literal)
         .replace("__SEQ_NAME__", slug)
         .replace("__SEQUENCE__", seq)
         .replace("__NMOL__", str(nmol))
@@ -1126,12 +1180,22 @@ def create_simulation(
             f"and/or fewer molecules."
         )
     typer.echo(f"   molecules:  {nmol}")
-    if temperature != DEFAULT_TEMPERATURE:
+    if temperature != DEFAULT_TEMPERATURE and not tea:
         typer.echo(f"   temperature: {temperature:g} K = {temperature - 273.15:.2f} C — "
                    f"not the {DEFAULT_TEMPERATURE:g} K default; this changes kT only, "
                    f"not the LCST (see DEFAULT_TEMPERATURE)")
+    elif tea:
+        typer.echo(f"   temperature: {temperature:g} K = {temperature - 273.15:.2f} C — "
+                   f"with TEA on this sets both kT and lambda")
     else:
         typer.echo(f"   temperature: {temperature:g} K")
+    if tea:
+        typer.echo(f"   TEA:        ON — lambda re-evaluated at {temperature:g} K, "
+                   f"gamma {tea_gamma:g}; written to runtime/residues_TEA.csv "
+                   f"(residues_CALVADOS2.csv untouched)")
+    else:
+        typer.echo(f"   TEA:        off (default) — constant lambda, identical to the "
+                   f"pipeline before the feature existed")
     if crosslink_settings is not None:
         typer.echo(f"   crosslink:  ON — lysine pairs within "
                    f"{crosslink_settings.distance} nm ({crosslink_settings.distance_angstrom} A) "
@@ -1247,6 +1311,19 @@ def new(
                  "temperature-dependent hydrophobicity, so this does not move the LCST.",
         ),
     ] = DEFAULT_TEMPERATURE,
+    tea: Annotated[
+        bool,
+        typer.Option("--tea/--no-tea",
+                     help="CALVADOS-TEA: make lambda temperature-dependent so LCST collapse "
+                          "comes out of the force field. Off by default; when off the run is "
+                          "bit-for-bit the stock pipeline. Writes its own residues table into "
+                          "runtime/ and never touches residues_CALVADOS2.csv."),
+    ] = False,
+    tea_gamma: Annotated[
+        float,
+        typer.Option(help="TEA gamma (only used with --tea). 3 is better than the paper's "
+                          "default of 2 on CALVADOS, on both of their own metrics."),
+    ] = TEA_GAMMA,
     box_height: Annotated[
         float | None,
         typer.Option(
@@ -1412,6 +1489,8 @@ def new(
         mass_concentration=mass_concentration,
         margin_fraction=margin_fraction,
         temperature=temperature,
+        tea=tea,
+        tea_gamma=tea_gamma,
         box_height=box_height,
         crosslink_distance=crosslink_distance,
         crosslink_valence=crosslink_valence,

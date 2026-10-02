@@ -62,9 +62,11 @@ def test_cell_overrides_shared(tmp_path):
 
 def test_template_default_is_unchanged_by_the_substitution():
     """The placeholder is what varies; the value written for a default run is the old literal."""
-    assert "temp = __TEMPERATURE__," in PREPARE_TEMPLATE
+    assert "__TEMPERATURE__" in PREPARE_TEMPLATE
+    assert "temp = 293.15" not in PREPARE_TEMPLATE      # no literal left behind
     rendered = PREPARE_TEMPLATE.replace("__TEMPERATURE__", repr(DEFAULT_TEMPERATURE))
-    assert "temp = 293.15," in rendered
+    assert "temp = 293.15" in rendered
+    assert "temp = temp," in rendered                   # Config reads the module-level value
 
 
 # ---------------------------------------------------------------------------

@@ -532,6 +532,7 @@ def collect_metadata(runtime_dir: Path) -> list[Field]:
 
         # ---- physics ----
         Field("temperature_K", config.get("temp", ""), "K", "Thermostat temperature"),
+        *_tea_fields(runtime_dir, config),
         Field("ionic_strength_M", config.get("ionic", ""), "M", "Ionic strength (Debye screening)"),
         Field("pH", config.get("pH", ""), "", "pH used for residue charges"),
         Field("z_wall_nm", _z_wall_from_expr(config.get("ext_force_expr")), "nm",
@@ -639,6 +640,46 @@ def write_timing(runtime_dir: Path, *, seconds: float, started: str, finished: s
     )
     return path
 
+
+
+def _tea_fields(runtime_dir, config) -> list:
+    """CALVADOS-TEA's settings, or a flat "off" for every ordinary run.
+
+    Detected from what the run actually used: a residues table written into
+    runtime/ means TEA, the project's shared table means stock. Reading the
+    file rather than a flag keeps this honest for a run prepared by hand.
+    """
+    from pathlib import Path as _Path
+
+    tea_csv = _Path(runtime_dir) / "residues_TEA.csv"
+    manifest = _Path(runtime_dir) / "tea.yaml"
+    if not tea_csv.is_file():
+        return [Field("tea", "off", "", "CALVADOS-TEA temperature-dependent lambda "
+                                       "(off = stock constant lambda)")]
+    gamma = ""
+    if manifest.is_file():
+        for line in manifest.read_text().splitlines():
+            if line.strip().startswith("gamma:"):
+                gamma = line.split(":", 1)[1].strip()
+    lambdas = {}
+    try:
+        import csv as _csv
+        with open(tea_csv, newline="") as f:
+            lambdas = {r["one"]: r["lambdas"] for r in _csv.DictReader(f)}
+    except Exception:
+        pass
+    return [
+        Field("tea", "on", "", "CALVADOS-TEA temperature-dependent lambda "
+                               "(off = stock constant lambda)"),
+        Field("tea_gamma", gamma, "", "TEA gamma: scales lambda's response to temperature"),
+        Field("tea_residues_csv", tea_csv.name, "",
+              "Residues table this run used; lambda re-evaluated at temperature_K, "
+              "sigma untouched, residues_CALVADOS2.csv unmodified"),
+        Field("tea_lambda_F", lambdas.get("F", ""), "", "lambda(Phe) as simulated"),
+        Field("tea_lambda_I", lambdas.get("I", ""), "", "lambda(Ile) as simulated"),
+        Field("tea_lambda_V", lambdas.get("V", ""), "", "lambda(Val) as simulated"),
+        Field("tea_lambda_E", lambdas.get("E", ""), "", "lambda(Glu) as simulated"),
+    ]
 
 def write_lattice(runtime_dir: Path, *, nx: int, ny: int, spacing: float, margin: float) -> Path:
     """Record the grafting lattice in runtime/lattice.yaml. Returns the path written."""
