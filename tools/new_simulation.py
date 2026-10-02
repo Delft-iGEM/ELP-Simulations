@@ -82,6 +82,33 @@ BOX_HEIGHT_FRACTION = 0.3  # of the contour length
 BOX_HEIGHT_STEP = 5.0  # nm — heights are rounded up to a multiple of this
 Z_WALL = 1.9  # nm, onset of the repulsive surface wall
 
+# Thermostat temperature, K. 293.15 (20 C) is what every run before this
+# setting existed used, hardcoded in the generated prepare.py, so it stays the
+# default and an unset temperature reproduces those runs exactly.
+#
+# What changing it does and does not do
+# -------------------------------------
+# It sets the Langevin thermostat, so it changes kT: chains at 313 K explore
+# more, diffuse faster and cross barriers more often than at 293 K. That is
+# real and it is the whole of the effect.
+#
+# It does NOT move the ELP transition. CALVADOS2's lambda (hydrophobicity)
+# scale is fitted at a single temperature and carries no explicit temperature
+# dependence, so the collapse that drives a real ELP through its LCST is simply
+# not in the model — raising `temperature` will not reproduce it, and a sweep
+# across the transition will show a smooth kT effect where the experiment shows
+# a sharp one. The same caveat is in tools/surface.py and tools/crosslink.py.
+# Use this to ask "how much does thermal energy matter here", not "where is the
+# cloud point". CALVADOS3 and the temperature-dependent CALVADOS variants are
+# the model change that would be needed for the latter.
+DEFAULT_TEMPERATURE = 293.15
+
+# The thermostat is only meaningful over a range the force field and the 10 fs
+# timestep were built for. Outside this the run is almost certainly a units
+# mistake, so it is refused rather than silently queued.
+MIN_TEMPERATURE = 150.0
+MAX_TEMPERATURE = 500.0
+
 # Stiffness of that wall, kJ/mol/nm^2. The wall is CALVADOS's one-sided
 # harmonic CustomExternalForce, step(z_wall-z) * 0.5 * WALL_K * (z_wall-z)^2, and
 # until 2026-09 the expression had no prefactor at all: k = 1 kJ/mol/nm^2, i.e.
@@ -521,6 +548,32 @@ def plan_box(
     )
 
 
+def check_temperature(temperature: float) -> float:
+    """`temperature` in K, or a clear refusal.
+
+    The range check exists for one failure mode: a temperature meant in Celsius.
+    "20" is a perfectly ordinary thing to write for an ELP run and would queue a
+    20 K simulation without complaint, so anything that looks like Celsius is
+    named as such rather than rejected with a bare bounds message.
+    """
+    try:
+        value = float(temperature)
+    except (TypeError, ValueError):
+        raise typer.BadParameter(f"Temperature must be a number in kelvin — got {temperature!r}.")
+    if value != value or value in (float("inf"), float("-inf")):
+        raise typer.BadParameter(f"Temperature must be a finite number in kelvin — got {value!r}.")
+    if not MIN_TEMPERATURE <= value <= MAX_TEMPERATURE:
+        hint = ""
+        if -50.0 <= value <= 120.0:
+            hint = (f" This looks like Celsius: {value} C is {value + 273.15:g} K, "
+                    f"which is what the column wants.")
+        raise typer.BadParameter(
+            f"Temperature must be between {MIN_TEMPERATURE:g} and {MAX_TEMPERATURE:g} K "
+            f"— got {value:g} K.{hint}"
+        )
+    return value
+
+
 def plan_steps(steps: int, max_n_save: int = 7000) -> tuple[int, int, int]:
     """Save frequency/frame count that yields ~1000 saved frames, capped at max_n_save.
 
@@ -694,7 +747,7 @@ if __name__ == "__main__":
      config = Config(
           sysname = sim_name,
           box = box,
-          temp = 293.15,
+          temp = __TEMPERATURE__,
           ionic = 0.19,
           pH = 7.5,
           ext_force = True,
@@ -774,6 +827,7 @@ def create_simulation(
     nmol: int,
     steps: int,
     name: str,
+    temperature: float = DEFAULT_TEMPERATURE,
     platform: str = "CUDA",
     partition: str = "gpu-a100",
     walltime: str = "24:30:00",
@@ -826,6 +880,13 @@ def create_simulation(
     The other crosslink_* arguments only matter when it is set; see
     tools/crosslink.py for what they mean and how far the results can be trusted.
 
+    `temperature` (K) sets the Langevin thermostat. It defaults to
+    DEFAULT_TEMPERATURE, the value every run used when it was hardcoded, so
+    leaving it alone reproduces those runs bit for bit. Read the note on that
+    constant before sweeping it: it changes kT and nothing else — CALVADOS2 has
+    no temperature-dependent hydrophobicity, so it will not move an ELP through
+    its LCST.
+
     `mode` is how chains attach to the surface: "brush" (default — residue 0 is
     the fixed "Z" anchor, the pipeline exactly as it was), "free" or
     "preattached" (chains hang from surface-bonded lysines; the surface_*
@@ -841,6 +902,7 @@ def create_simulation(
         raise typer.BadParameter("Number of steps must be at least 1.")
     if platform not in {"CUDA", "CPU"}:
         raise typer.BadParameter("Platform must be 'CUDA' or 'CPU'.")
+    temperature = check_temperature(temperature)
     if mode not in MODES:
         raise typer.BadParameter(f"mode must be one of {', '.join(MODES)} — got {mode!r}.")
 
@@ -984,6 +1046,7 @@ def create_simulation(
         .replace("__Z_WALL__", str(Z_WALL))
         .replace("__WALL_K__", str(WALL_K))
         .replace("__Z_ANCHOR__", str(Z_ANCHOR))
+        .replace("__TEMPERATURE__", repr(temperature))
         .replace("__SEQ_NAME__", slug)
         .replace("__SEQUENCE__", seq)
         .replace("__NMOL__", str(nmol))
@@ -1063,6 +1126,12 @@ def create_simulation(
             f"and/or fewer molecules."
         )
     typer.echo(f"   molecules:  {nmol}")
+    if temperature != DEFAULT_TEMPERATURE:
+        typer.echo(f"   temperature: {temperature:g} K = {temperature - 273.15:.2f} C — "
+                   f"not the {DEFAULT_TEMPERATURE:g} K default; this changes kT only, "
+                   f"not the LCST (see DEFAULT_TEMPERATURE)")
+    else:
+        typer.echo(f"   temperature: {temperature:g} K")
     if crosslink_settings is not None:
         typer.echo(f"   crosslink:  ON — lysine pairs within "
                    f"{crosslink_settings.distance} nm ({crosslink_settings.distance_angstrom} A) "
@@ -1170,6 +1239,14 @@ def new(
                  "so they stop wrapping, at the cost of a less crowded rim.",
         ),
     ] = DEFAULT_MARGIN_FRACTION,
+    temperature: Annotated[
+        float,
+        typer.Option(
+            help="Thermostat temperature in KELVIN (293.15 = 20 C, the default every run "
+                 "used before this option existed). Changes kT only: CALVADOS2 has no "
+                 "temperature-dependent hydrophobicity, so this does not move the LCST.",
+        ),
+    ] = DEFAULT_TEMPERATURE,
     box_height: Annotated[
         float | None,
         typer.Option(
@@ -1334,6 +1411,7 @@ def new(
         length_measure=length_measure,
         mass_concentration=mass_concentration,
         margin_fraction=margin_fraction,
+        temperature=temperature,
         box_height=box_height,
         crosslink_distance=crosslink_distance,
         crosslink_valence=crosslink_valence,
