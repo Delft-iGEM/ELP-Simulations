@@ -53,6 +53,7 @@ import typer
 
 from tools.crosslink import CrosslinkSettings
 from tools.surface import MODES, SurfaceSettings, check_capacity
+from tools.tea import DEFAULT_GAMMA
 
 app = typer.Typer(add_completion=False, no_args_is_help=False)
 
@@ -112,7 +113,7 @@ MAX_TEMPERATURE = 500.0
 # CALVADOS-TEA's gamma, re-exported so callers configure the feature from one
 # place. The value and the reason for it live in tools/tea.py; TEA is off by
 # default and this is only consulted when a run turns it on.
-TEA_GAMMA = 3.0
+TEA_GAMMA = DEFAULT_GAMMA
 
 # Stiffness of that wall, kJ/mol/nm^2. The wall is CALVADOS's one-sided
 # harmonic CustomExternalForce, step(z_wall-z) * 0.5 * WALL_K * (z_wall-z)^2, and
@@ -1328,8 +1329,8 @@ def new(
     ] = False,
     tea_gamma: Annotated[
         float,
-        typer.Option(help="TEA gamma (only used with --tea). 3 is better than the paper's "
-                          "default of 2 on CALVADOS, on both of their own metrics."),
+        typer.Option(help="TEA gamma (only used with --tea). Default 6, outside the {2, 3} "
+                          "the paper validated on CALVADOS; see tools/tea.py."),
     ] = TEA_GAMMA,
     box_height: Annotated[
         float | None,

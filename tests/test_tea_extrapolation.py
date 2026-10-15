@@ -27,8 +27,9 @@ def test_inside_the_fit_range_the_flag_changes_nothing():
 
 
 def test_the_flag_opens_270_k():
-    value = tea.lambda_T("I", 270.0, allow_extrapolation=True)
-    assert 0.0 < value < tea.lambda_T("I", 280.0)
+    # Pinned to gamma 3: at the default of 6, Ile at 270 K is already negative.
+    value = tea.lambda_T("I", 270.0, 3.0, allow_extrapolation=True)
+    assert 0.0 < value < tea.lambda_T("I", 280.0, 3.0)
 
 
 def test_hard_walls_are_not_opened_by_the_flag():

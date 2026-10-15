@@ -1103,8 +1103,10 @@ def spec_from_simulation(sim_dir: Path) -> RunSpec | None:
         temperature=(number("temperature_K") if not math.isnan(number("temperature_K"))
                      else DEFAULT_TEMPERATURE),
         tea=(meta.get("tea", "").strip().lower() in TRUTHY),
+        # Every TEA run before the default moved to 6 used 3, so a run with no
+        # recorded gamma is one of those, not one at today's default.
         tea_gamma=(number("tea_gamma") if not math.isnan(number("tea_gamma"))
-                   else TEA_GAMMA),
+                   else 3.0),
     )
 
 

@@ -119,8 +119,10 @@ T_HARD_MAX = 420.0
 # HPS-Urry; on CALVADOS gamma=3 is better on both of their own metrics (SI
 # S5/S6: single-chain MAE 0.247 vs 0.266, ELP T_cloud Pearson r 0.47 vs 0.33,
 # and the gamma=2 interval spans zero). They never tested CALVADOS outside
-# {2, 3}, so stay inside it.
-DEFAULT_GAMMA = 3.0
+# {2, 3}. 6 is our own choice, OUTSIDE that validated range: it doubles every
+# d_lambda, so the per-residue numbers quoted in the module docstring (all at
+# gamma=3) double too. Runs before 2026-10-05 used 3; metadata records which.
+DEFAULT_GAMMA = 6.0
 
 # The Arg row to use. The table also carries a charmm36 Arg fit (kappa = +0.059)
 # whose sign is opposite; no residue maps to it, so it is inert here and kept

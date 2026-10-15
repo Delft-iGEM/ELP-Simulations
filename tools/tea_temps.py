@@ -42,9 +42,10 @@ import subprocess
 from pathlib import Path
 
 from tools.new_simulation import _project_root
+from tools.tea import DEFAULT_GAMMA
 from tools.tea_sequences import all_terminal, original, vpgig_only
 
-GAMMA = 3.0
+GAMMA = DEFAULT_GAMMA
 TEMPERATURES = [270.0, 350.0]
 CONTROL_T = 350.0
 

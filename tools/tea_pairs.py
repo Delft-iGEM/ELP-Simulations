@@ -38,9 +38,9 @@ import subprocess
 from pathlib import Path
 
 from tools.new_simulation import _project_root, create_simulation
-from tools.tea import T_MAX, T_MIN
+from tools.tea import DEFAULT_GAMMA, T_MAX, T_MIN
 
-GAMMA = 3.0
+GAMMA = DEFAULT_GAMMA
 TEMPERATURES = [280.0, 350.0]      # 280 is exactly TEA's lower fit bound
 NS = 300.0
 N_SAVE = 7000                      # 70 ps/frame, same cadence as the sweeps
