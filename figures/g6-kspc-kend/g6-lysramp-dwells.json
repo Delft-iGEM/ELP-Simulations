@@ -1,0 +1,72 @@
+{
+  "runs_analysed": [
+    "g6-kspc04-290k",
+    "g6-kspc04-370k",
+    "g6-kspc09-290k",
+    "g6-kspc09-370k",
+    "g6-kspc14-290k",
+    "g6-kspc14-370k",
+    "g6-kspc19-290k",
+    "g6-kspc19-370k",
+    "g6-kspc24-290k",
+    "g6-kspc24-370k",
+    "g6-kspc29-290k",
+    "g6-kspc29-370k",
+    "g6-kspc34-290k",
+    "g6-kspc34-370k",
+    "g6-kspc39-290k",
+    "g6-kspc39-370k",
+    "g6-kspc44-290k",
+    "g6-kspc44-370k",
+    "g6-kspc49-290k",
+    "g6-kspc49-370k",
+    "g6-kend04-290k",
+    "g6-kend04-370k",
+    "g6-kend09-290k",
+    "g6-kend09-370k",
+    "g6-kend14-290k",
+    "g6-kend14-370k",
+    "g6-kend19-290k",
+    "g6-kend19-370k",
+    "g6-kend24-290k",
+    "g6-kend24-370k",
+    "g6-kend29-290k",
+    "g6-kend29-370k",
+    "g6-kend34-290k",
+    "g6-kend34-370k",
+    "g6-kend39-290k",
+    "g6-kend39-370k",
+    "g6-kend44-290k",
+    "g6-kend44-370k",
+    "g6-kend49-290k",
+    "g6-kend49-370k"
+  ],
+  "runs_missing": [],
+  "n_residues": 357,
+  "rg_theta_nm": 3.9678331618151486,
+  "rg_theta_rule": "0.21 * N**0.5 nm",
+  "analysis_window_ns": [
+    50.0,
+    399.93
+  ],
+  "frame_ns": 0.07,
+  "primary_rule": {
+    "name": "hyst",
+    "enter_below": "0.95 * Rg_theta",
+    "exit_above": "1.05 * Rg_theta",
+    "min_dwell_frames": 3
+  },
+  "check_rule": {
+    "name": "bare",
+    "collapsed_if": "Rg < Rg_theta",
+    "min_dwell_frames": 1
+  },
+  "min_dwell_ns": 0.21000000000000002,
+  "censoring": "dwells touching the first or last analysed frame are right-censored; tau from censored geometric ML on frames above the minimum, p = sum(L - L_min) / (sum(L - L_min) + n_completed), tau = -dt / ln p; Kaplan-Meier median also reported",
+  "bootstrap": {
+    "resamples": 1000,
+    "ci": "percentile 2.5-97.5",
+    "seed": 20261014
+  },
+  "small_n_flag": 10
+}
