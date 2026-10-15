@@ -1,0 +1,14 @@
+sub4-anchor-a17-l103-s6-c0p03-i0p31-rep3: contacts of ['K'] (LYS) within 12.0 Å
+  beads tracked:    64 (4 per chain x 16 chains)
+  frames analysed:  4286/5714 (from frame 1428)
+  pairs monitored:  93 intra-chain + 1752 inter-chain = 1845  (171 pairs dropped: both lysines surface-bonded, so their separation is fixed by the construction)
+
+                           intra-chain   inter-chain
+  hits (pair-frames)            43,352        51,732
+  hits per frame                 10.11         12.07
+  P(pair in contact)           0.10876       0.00689
+  pairs ever in contact          75/93      240/1752
+  closest approach (Å)            5.32          5.40
+
+  -> per pair, an intra-chain (same polymer) contact is 15.79x as likely as an inter-chain one.
+  -> but summed over all pairs actually present, 54.4% of all contacts are between different polymers (51,732 of 95,084) — that share is what a bulk crosslinking experiment sees.
