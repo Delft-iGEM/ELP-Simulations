@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--rg-csv", type=Path, required=True)
-    parser.add_argument("--out", type=Path, default=Path("tea-270-350-response.png"))
+    parser.add_argument("--out", type=Path, default=Path("figures/tt/tea-270-350-response.png"))
     args = parser.parse_args(argv)
 
     delta = load_delta(args.rg_csv)
