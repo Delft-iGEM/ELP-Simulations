@@ -1,0 +1,24 @@
+response,group,label,kruskal_H,p
+n_bridges,network,inter-chain crosslinks (bridges),99.20875588203863,1.449707790000001e-20
+n_loops,network,intra-chain crosslinks (loops),99.04505398571698,1.570814355897146e-20
+n_formed,network,crosslinks formed,52.81719557657242,9.306331609327139e-11
+bridge_frac,network,bridge fraction,99.64100777194398,1.1729217602157257e-20
+n_pairs_bridged,network,distinct chain pairs bridged,100.55110713750426,7.507837568984023e-21
+secondary_loops,network,extra bridges between already-joined chains,23.578435387328703,9.701788205080029e-05
+largest_cluster_frac,network,largest connected cluster / 16 chains,90.71156662589831,9.29688607073277e-19
+cycle_rank,network,network cycle rank,85.57224152600848,1.1469918211809694e-17
+n_unreacted,network,free lysines left unreacted,52.817195576572345,9.306331609327488e-11
+n_bridges_100ns,network,bridges at 100 ns,98.69159280619657,1.8679107960326698e-20
+t50_bridges_ns,timing,time to half the final bridges (ns),17.462686231603552,0.0015710812686772614
+t90_bridges_ns,timing,time to 90 % of the final bridges (ns),8.253156604921628,0.08273274026063006
+h50_nm,height,brush h50 (nm),7.327028073898759,0.11958297611064526
+h95_nm,height,brush h95 (nm),20.201384424203525,0.0004556959513135935
+z_bridge_nm,height,bridge height (nm),94.61930049463666,1.3731369382676829e-19
+z_bridge_rel_h95,height,bridge height / h95,96.94261592696506,4.400801840582285e-20
+bridge_frac_above_h50,height,bridges above h50 (fraction of bond-frames),91.955165255761,5.059181248287035e-19
+z_loop_nm,height,loop height (nm),88.65233342945942,2.5453023806480635e-18
+z_lys_unreacted_nm,height,unreacted lysine height (nm),72.06618115773813,8.310316285484921e-15
+z_rgd_nm,height,RGD height (nm),9.392890595416702,0.05199524798979731
+rgd_frac_above_h50,height,RGD above h50 (fraction),5.549820442399437,0.23538480845940993
+rg_nm,size,Rg (nm),41.355198385724634,2.2690494134478427e-08
+ree_nm,size,end-to-end distance (nm),13.902047854715306,0.007614330530388612

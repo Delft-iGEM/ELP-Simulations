@@ -1,0 +1,164 @@
+SubM4 first-pass statistics - n = 104 runs, 84 design points, response = log(inter_free_12A)
+
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:                   logy   R-squared:                       0.960
+Model:                            OLS   Adj. R-squared:                  0.954
+Method:                 Least Squares   F-statistic:                     152.6
+Date:                Fri, 16 Oct 2026   Prob (F-statistic):           8.17e-56
+Time:                        07:08:25   Log-Likelihood:                 53.999
+No. Observations:                 104   AIC:                            -78.00
+Df Residuals:                      89   BIC:                            -38.33
+Df Model:                          14                                         
+Covariance Type:            nonrobust                                         
+===============================================================================
+                  coef    std err          t      P>|t|      [0.025      0.975]
+-------------------------------------------------------------------------------
+Intercept      -0.9282      0.041    -22.568      0.000      -1.010      -0.846
+C               0.9911      0.028     35.133      0.000       0.935       1.047
+L              -0.2245      0.031     -7.192      0.000      -0.287      -0.162
+S              -0.2901      0.031     -9.389      0.000      -0.352      -0.229
+ion             0.0934      0.029      3.248      0.002       0.036       0.151
+I(C ** 2)      -0.7406      0.061    -12.224      0.000      -0.861      -0.620
+I(L ** 2)       0.0776      0.064      1.216      0.227      -0.049       0.204
+I(S ** 2)      -0.0839      0.064     -1.320      0.190      -0.210       0.042
+I(ion ** 2)    -0.1288      0.056     -2.302      0.024      -0.240      -0.018
+C:L            -0.2224      0.048     -4.674      0.000      -0.317      -0.128
+C:S            -0.4672      0.059     -7.858      0.000      -0.585      -0.349
+C:ion           0.0098      0.051      0.194      0.847      -0.091       0.111
+L:S            -0.2428      0.064     -3.806      0.000      -0.370      -0.116
+L:ion          -0.0769      0.056     -1.362      0.177      -0.189       0.035
+S:ion          -0.0335      0.059     -0.570      0.570      -0.150       0.083
+==============================================================================
+Omnibus:                       20.495   Durbin-Watson:                   1.694
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):               53.685
+Skew:                          -0.646   Prob(JB):                     2.20e-12
+Kurtosis:                       6.274   Cond. No.                         6.94
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+
+Per-parameter F-tests (drop every term containing the parameter) and R2 shares:
+     parameter  terms_dropped        F  df_num  df_den      p  unique_dR2  lmg_share_R2  lmg_share_of_explained
+ concentration              5 313.5643     5.0    89.0 0.0000      0.7045        0.7835                  0.8161
+  chain_length              5  16.7354     5.0    89.0 0.0000      0.0376        0.0585                  0.0610
+   spacing_pct              5  29.4169     5.0    89.0 0.0000      0.0661        0.0644                  0.0671
+ionic_strength              5   4.7821     5.0    89.0 0.0006      0.0107        0.0536                  0.0559
+
+Lack-of-fit F-test (pure error = anchor replicates):
+ss_pure_error         0.09061
+df_pure_error        20.00000
+sd_pure_error_log     0.06731
+ss_lack_of_fit        2.06500
+df_lack_of_fit       69.00000
+sd_residual_log       0.15563
+F                     6.60562
+p                     0.00001
+n_design_points      84.00000
+
+Fit, cross-validation and diagnostics:
+n_runs                      104.0000
+n_params                     15.0000
+R2                            0.9600
+adj_R2                        0.9537
+cv5_grouped_R2_ols            0.8821
+cv5_grouped_RMSE_log_ols      0.2472
+cv5_grouped_R2_rf             0.8714
+cv5_grouped_RMSE_log_rf       0.2582
+shapiro_W                     0.9464
+shapiro_p                     0.0004
+breusch_pagan_p               0.0000
+max_vif                       1.6349
+n_cooks_gt_4_over_n           9.0000
+max_cooks                     0.9469
+
+Random forest importance (log response):
+     parameter  perm_importance_train  perm_importance_train_sd  perm_importance_heldout  mean_abs_shap
+ concentration                 1.7725                    0.1920                   1.7784         0.5292
+  chain_length                 0.0483                    0.0067                   0.0526         0.0650
+   spacing_pct                 0.0927                    0.0132                   0.0750         0.0827
+ionic_strength                 0.0073                    0.0014                   0.0105         0.0242
+
+Runs with Cook's D > 4/n:
+                                   slug     y  resid_studentized  leverage  cooks_d
+sub4-anchor-a02-l64-s7-c0p01-i0p19-rep2 0.041             -2.650     0.166    0.087
+sub4-anchor-a02-l64-s7-c0p01-i0p19-rep3 0.042             -2.302     0.166    0.067
+      sub4-extra2-l58-s4-c0p01-i0p43-05 0.040             -6.160     0.346    0.947
+    sub4-extra3-l110-s22-c0p06-i0p35-06 0.457              2.166     0.178    0.065
+      sub4-extra3-l57-s6-c0p03-i0p11-10 0.343              2.559     0.229    0.122
+    sub4-extra4-l150-s28-c0p06-i0p10-14 0.303              1.651     0.384    0.111
+      sub4-extra4-l54-s8-c0p02-i0p12-19 0.201              1.840     0.207    0.057
+      sub4-extra4-l76-s4-c0p06-i0p35-28 1.361              1.304     0.286    0.045
+     sub4-extra5-l129-s7-c0p06-i0p06-06 0.638             -1.101     0.507    0.083
+
+Gamma GLM (log link) vs OLS on log y - coefficients:
+       term  coef_log     se      p  ci_low  ci_high  ols_coef_log
+  Intercept   -0.9353 0.0387 0.0000 -1.0112  -0.8594       -0.9282
+          C    0.9838 0.0266 0.0000  0.9317   1.0358        0.9911
+          L   -0.2303 0.0294 0.0000 -0.2879  -0.1727       -0.2245
+          S   -0.2966 0.0291 0.0000 -0.3536  -0.2395       -0.2901
+        ion    0.0962 0.0271 0.0004  0.0431   0.1492        0.0934
+  I(C ** 2)   -0.7137 0.0570 0.0000 -0.8255  -0.6019       -0.7406
+  I(L ** 2)    0.0724 0.0601 0.2281 -0.0454   0.1902        0.0776
+  I(S ** 2)   -0.0645 0.0598 0.2810 -0.1818   0.0528       -0.0839
+I(ion ** 2)   -0.1179 0.0527 0.0252 -0.2211  -0.0146       -0.1288
+        C:L   -0.2066 0.0448 0.0000 -0.2944  -0.1188       -0.2224
+        C:S   -0.4288 0.0560 0.0000 -0.5385  -0.3191       -0.4672
+      C:ion    0.0048 0.0477 0.9193 -0.0887   0.0984        0.0098
+        L:S   -0.2153 0.0601 0.0003 -0.3330  -0.0976       -0.2428
+      L:ion   -0.0756 0.0532 0.1548 -0.1799   0.0286       -0.0769
+      S:ion   -0.0326 0.0554 0.5558 -0.1412   0.0759       -0.0335
+
+Sensitivity (same model, other frozen responses):
+                response           runs   n     R2  adj_R2  lmg_C  p_C  lmg_L  p_L  lmg_S  p_S  lmg_ion  p_ion  coef_C  coef_L  coef_S  coef_ion
+          inter_free_12A            own 104 0.9600  0.9537 0.7835  0.0 0.0585  0.0 0.0644  0.0   0.0536 0.0006  0.9911 -0.2245 -0.2901    0.0934
+           inter_free_8A            own 104 0.9417  0.9325 0.7652  0.0 0.0529  0.0 0.0610  0.0   0.0626 0.0000  1.0018 -0.1908 -0.2917    0.1443
+          inter_free_16A            own 104 0.9624  0.9564 0.7912  0.0 0.0608  0.0 0.0629  0.0   0.0474 0.0162  0.9727 -0.2337 -0.2746    0.0587
+         inter_teamA_12A            own 104 0.9615  0.9554 0.7710  0.0 0.0622  0.0 0.0729  0.0   0.0555 0.0009  1.0047 -0.2474 -0.3225    0.0940
+         inter_teamA_12A own + teammate 124 0.9381  0.9301 0.7682  0.0 0.0640  0.0 0.0643  0.0   0.0415 0.0010  1.0223 -0.2509 -0.2755    0.0964
+inter_free_12A_from200ns            own 104 0.9618  0.9558 0.7817  0.0 0.0579  0.0 0.0656  0.0   0.0567 0.0002  0.9940 -0.2151 -0.3019    0.1101
+
+Teammate runs (team definition A, summary only) predicted by the team-A model fitted on our
+runs alone (held out), then lack of fit of the team-A model without / with them:
+n_teammate             20.0000
+heldout_R2              0.8256
+heldout_RMSE_log        0.4083
+own_cv5_RMSE_log        0.2502
+mean_resid_log         -0.0733
+mean_resid_p            0.4362
+n_outside_95pi          2.0000
+own_sd_residual_log     0.1578
+own_F                   7.1225
+own_p                   0.0000
+all_sd_residual_log     0.2091
+all_F                  12.1384
+all_p                   0.0000
+                             slug     y  resid_log  pred
+ sub4-extra-l61-s3-c0p01-i0p18-04 0.009     -1.633 0.048
+sub4-extra-l74-s18-c0p06-i0p38-15 0.635      0.550 0.366
+
+Reactive anchors A10-A19 (crosslinking on, excluded from every fit) vs the non-reactive
+team-A model on all runs:
+           obs_mean  obs_sd  pred_nonreactive   ratio
+anchor_id                                            
+A10           7.529   1.533             0.085  88.909
+A11          14.593   2.886             0.154  94.900
+A12          17.086   2.922             0.256  66.663
+A13          18.647   0.948             0.414  45.057
+A14          19.263   1.960             0.251  76.754
+A15          19.925   1.868             0.429  46.463
+A16          16.639   2.978             0.396  42.034
+A17          12.195   1.052             0.463  26.320
+A18          18.793   1.966             0.302  62.285
+A19          17.859   0.706             0.538  33.193
+
+Secondary metrics (same quadratic model; LMG R2 shares):
+               metric  scale    R2  lmg_C  lmg_L  lmg_S  lmg_ion
+       intra_free_12A    log 0.986  0.014  0.403  0.539    0.030
+bridge_loop_ratio_12A    log 0.973  0.510  0.201  0.252    0.011
+ largest_cluster_frac linear 0.981  0.729  0.079  0.114    0.059
+               h95_nm    log 0.991  0.166  0.763  0.046    0.016
+                rg_nm    log 0.995  0.046  0.904  0.022    0.023
+               ree_nm    log 0.988  0.023  0.908  0.032    0.025
+inter_free_pairs_ever linear 0.986  0.798  0.082  0.060    0.047

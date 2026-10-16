@@ -1,0 +1,13 @@
+Optimality rule (settings.yaml):
+1. most inter-chain crosslinks (n_bridges, primary). 2. a class or design counts as optimal only if its network is connected (largest_cluster_frac = 1) in >= 90 % of its runs. 3. among those not separable on n_bridges (Holm p >= 0.05), prefer more distinct bridged chain pairs, then the smaller between-run spread (IQR of n_bridges).
+
+Per class:
+              median_bridges  iqr_bridges  frac_connected  median_pairs_bridged   n  viable
+design_class                                                                               
+clustered                3.0          4.0            0.00                   3.0  17   False
+focused                  7.0          3.0            0.00                   7.0  25   False
+random                  14.0          5.0            0.14                  13.0  43   False
+uniform                 19.0          2.0            0.48                  18.0  25   False
+scramble                19.5          4.0            0.45                  18.0  20   False
+
+No class has a connected network in >= 90 % of its runs.

@@ -1,0 +1,41 @@
+# SubM4 frozen definitions. Written 2026-10-15, before any response was summarised by
+# design parameter. Change nothing here after looking at results; add a dated note instead.
+
+response:
+  name: inter_free_12A        # mean inter-chain K-K contacts per frame (stiffness proxy)
+  pair_definition: B_free_lysines_only   # neither lysine surface-pinned (confirmed by Chris)
+  cutoff_A: 12.0              # CA-CA bead distance, minimum image in x, y and z (confirmed by Chris)
+  min_seq_separation_res: 4   # intra-chain pairs closer along the chain are dropped (never binds: min K-K gap is 20 residues)
+  sensitivity:
+    cutoffs_A: [8.0, 16.0]
+    pair_definitions: [A_drop_both_pinned]   # team convention of earlier submodules
+
+trajectory:
+  units: "DCD/PDB in Angstrom; CALVADOS/OpenMM settings in nm"
+  surface_normal: z
+  lysine_selection: "name CA and resname LYS"
+  pinned_lysines: "surface_state.json site_beads[pinned]; 19 of 64, fixed for the whole run"
+  frames: 5714                # 70 ps per frame, 400 ns
+  chains_whole_in_dcd: true   # max bond 4.6 A (bond length 3.8 A)
+
+equilibration:
+  # Proposed from 02_equilibration.py and confirmed by Chris on 2026-10-15. Chodera burn-in
+  # of the primary response <= 57 ns in all 104 runs; Rg/h95 detections up to 199 ns are
+  # non-directional (+-4 %) slow fluctuations -> flagged (qc_burnin_exceeds_discard), not excluded.
+  discard_frames: 1428        # 100 ns (team convention); production = frames 1428-5713, 300 ns
+  n_blocks_for_sem: 10        # 30 ns blocks >> correlation times (Rg g ~ 4 ns)
+  sensitivity_discard_frames: 2857   # 200 ns, primary response only
+
+qc:
+  drift_test: "first vs second half of production, |diff| / combined block SEM > 3 flags"
+  cooks_distance_flag: "> 4 / n"
+  plan_box: "lattice_matches_box and margin 0 and |concentration change| < 1 %"
+
+stats:
+  coded_ranges:
+    concentration: [0.01, 0.06]
+    chain_length: [50, 150]
+    spacing_pct: [5, 25]
+    ionic_strength: [0.05, 0.50]
+  random_seed: 20261015
+  cv_folds: 5                 # GroupKFold, group = design point (anchor replicates together)

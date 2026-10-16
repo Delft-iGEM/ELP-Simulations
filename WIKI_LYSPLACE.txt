@@ -1,0 +1,296 @@
+WIKI SOURCE NOTES: the RGD+ lysine-placement analysis (analysis_lysplace/)
+Written 2026-10-16. Repository: /home/cjbrunings/ELP-Simulations (DelftBlue). Not committed to git.
+Everything here comes from analysis_lysplace/ (README.md, settings.yaml, stats/, figures/, scripts/). The raw simulation
+output under simulations/*/runtime was only READ, never modified. If the wiki needs more digits, take them from stats/.
+
+======================================================================================
+0. ONE-PARAGRAPH SUMMARY (good for the top of the wiki page)
+======================================================================================
+We compared 130 simulations of the RGD+ construct (16 chains, 4 lysines per chain, crosslinking ON, 400 ns) that differ
+ONLY in where the four lysines (K) sit along the chain. Almost every run forms nearly all of the 22 possible crosslinks, so
+the NUMBER of crosslinks says little. What placement decides is WHERE the bonds go: inter-chain bridges (useful, they
+build the network) versus intra-chain loops (wasted, they do nothing for the network). Median bridges per run:
+clustered 3, focused 7, random 14, uniform 19, scramble 19.5. One variable explains almost all of it: the sequence distance
+from a lysine to the NEAREST OTHER LYSINE ON ITS OWN CHAIN. Close neighbours react with each other and form loops; far-apart
+lysines reach other chains and form bridges. Design rule: spread the four lysines as far apart as the construct allows
+(ideally ~100 residues apart; at least 60 residues gets within ~1 bridge of the best). Placement also changes WHERE in the
+brush the network sits, but not the brush height or how exposed the RGD is.
+
+======================================================================================
+1. THE QUESTION AND WHY WE DID IT
+======================================================================================
+- Goal (from Chris): which lysine arrangement (focused, uniform, clustered, random) gives the most INTER-chain crosslinks,
+  and how do we define and find an "optimal" arrangement?
+- Why inter-chain: a crosslink between two lysines on the SAME chain is a loop (elastically inactive). A crosslink between
+  lysines on DIFFERENT chains is a bridge; bridges are what turn a brush of separate chains into a connected network/gel.
+- This is a sub-submodule of the lysine work, next to SubM4. In SubM4 crosslinking was OFF and the response was a proxy
+  (inter-chain lysine-lysine contacts). Here crosslinking is ON, so we measure the REAL crosslink network instead of a proxy,
+  plus the z-height (distance from the wall) structure of the brush and of the bonds.
+
+======================================================================================
+2. GLOSSARY (define these on the wiki page)
+======================================================================================
+- Construct / chain: 357 residues = LQ + 4 x [RGD domain + ELP block + VP]. RGD domain = LDASTVYAVTGRGDSPASSAASA (contains
+  the GRGDS motif). ELP block = (VPGXG)n repeats, blocks of 14, 11, 15, 11 repeats; X = I (isoleucine) except the 4 designed
+  K and M at repeat 6 of blocks 2 and 4. So there are 4 RGD domains per chain (the "RGD+" part).
+- Lysine (K): the crosslinkable residue. 4 per chain, 64 in the 16-chain system.
+- Pinned lysine: 19 of the 64 lysines (30 %, "preattached 0.3") are tethered to the surface at t = 0 and stay there. They
+  anchor the brush to the wall and cannot react with other lysines. So 45 lysines are free; with valence 1 (each lysine can
+  make only ONE bond) the maximum is floor(45 / 2) = 22 crosslinks per run.
+- Crosslink: forms when two free K beads come within 0.8 nm; reaction probability p = 1 (first encounter, irreversible),
+  valence 1, crosslinking starts at 10 ns.
+- Bridge: inter-chain K-K crosslink. n_bridges (at end of run) is the PRIMARY response.
+- Loop: intra-chain K-K crosslink (both lysines on the same chain).
+- Distinct chain pairs bridged: how many different chain pairs are joined by at least one bridge.
+- Secondary loop: an extra bridge between two chains that are already joined (n_bridges - distinct pairs).
+- Largest connected cluster: the largest set of chains linked by bridges, as a fraction of 16. "Connected network" = all 16
+  chains in one cluster (the surface is NOT counted as a node, so chains linked only via their pins count as separate).
+- Cycle rank: n_bridges - 16 + number of components = number of independent cycles in the chain network.
+- Unreacted lysines: free lysines left without a partner.
+- h50 / h95: brush heights where 50 % / 95 % of the mass lies below (mass-weighted, above the wall).
+- Design class (name suffix on the run): see section 3.
+
+======================================================================================
+3. DATA
+======================================================================================
+130 runs from five run sheets (all passed QC: completed, 5714 frames, a single job, 19 of 64 lysines pinned at t = 0 and
+none during the run, valence 1, box checks pass):
+  Chr_RGD+_Lysine_Sweep.csv              40 runs: 10 uniform, 10 focused, 10 clustered, 10 random
+  Chr_RGD+_Lysine_sweep_20.csv           20 runs: 7 uniform, 7 focused, 6 random
+  Chr_RGD+_Lysine_sweep_30.csv           30 runs: 7 clustered, 8 uniform, 8 focused, 7 random
+  Chr_RGD+_lysRandom.csv                 20 runs: random
+  Chr_RGD+_lysine_scramble_sweep_20.csv  20 runs: no class suffix -> called "scramble" (one K per block)
+Totals per class: clustered 17, focused 25, random 43, uniform 25, scramble 20.
+
+Constant across runs: 16 chains, C = 0.04 chains/nm2, ionic strength 0.19 M, 293.15 K, 400 ns (5714 frames, one per 70 ps).
+Only the K positions differ.
+
+Run-name code: positions are K repeat numbers per block, in order block 1 / 2 / 3 / 4 (written R / G / D for blocks 2/3/4
+in the names). Example "13R1G13D4" = block 1 repeat 13, block 2 repeat 1, block 3 repeat 13, block 4 repeat 4. "0R0G0D3+4+5+7"
+= four K in block 4 (0 = no K in that block). The name was cross-checked against the K positions in each run's simulated
+molecules.fasta for all 130 runs (all matched).
+
+The five classes (class and closest-K-K spacing are almost the same variable; only "random" covers the whole range):
+  clustered : 4 K in one block, adjacent repeats                          closest K-K spacing 5 residues
+  focused   : 4 K in one block, spread out                                5-15 residues
+  random    : 19 two-block, 19 three-block, 3 one-per-block, 2 one-block  5-80 residues
+  uniform   : one K per block                                             30-105 residues
+  scramble  : one K per block (the sheet without a class suffix)          30-105 residues
+
+IMPORTANT: NO DESIGN WAS SIMULATED TWICE. There are no replicates, so noise is judged only from the spread within each class.
+
+======================================================================================
+4. HOW THE ANALYSIS WAS DONE (pipeline, in order)
+======================================================================================
+All scripts are in analysis_lysplace/scripts/, fixed random seed 20261016, run all with scripts/run_all.sh.
+
+Step 0  00_inventory.py   Builds the design table (run_inventory.csv): K positions, design descriptors (minimum K-K spacing,
+                          number of blocks carrying K, K centroid), metadata and QC. Reads sheets, molecules.fasta,
+                          metadata.csv, crosslink.yaml, surface.yaml. No trajectory frames and no responses.
+Step 1  01_extract.py     ONE pass over each DCD trajectory (~12 s per run; extract.sbatch for the cluster, or --workers 8).
+                          Stores per run (timeseries/<run>.npz): brush h50/h95, per-frame heights of every crosslink
+                          (midpoint z of the two bonded beads), per-lysine height, RGD height (R, G, D beads of the four
+                          GRGDS motifs), Rg and end-to-end distance per chain, and 2 A z-profiles. Heights are above the
+                          wall (z_wall = 1.9 nm); z is the surface normal. Only runs without an .npz are extracted.
+Step 2  02_metrics.py     Network metrics from crosslink_events.csv (bridges, loops, formed, distinct pairs, secondary loops,
+                          largest cluster, cycle rank, unreacted, network at 100 ns, bond timing t50/t90) and the per-lysine
+                          and per-bond tables. Consistency is asserted: lysine states reproduce the network counts, 19 pinned
+                          per run. Outputs runs_metrics.csv, per_lysine.csv (8320 lysines), per_bond.csv (2750 crosslinks),
+                          profiles.npz.
+Step 3  03_compare.py     Class comparison: Kruskal-Wallis over the 5 classes; pairwise Mann-Whitney U with Holm correction
+                          over the 10 pairs; Cliff's delta with bootstrap 95 % CI (10 000 resamples); medians with bootstrap
+                          CIs; quasi-binomial GLM (logit) of n_bridges/22 on the design descriptors (all runs and random only,
+                          5-fold CV); and the frozen optimality rule.
+Step 4  04_lysine_model.py  Per-lysine logistic GEE (see section 6), run-level 10-fold CV, and an exhaustive design search over
+                          all 211 876 placements of 4 K on the 49 non-M VPGXG positions.
+Step 5  05_figures.py     Plotly figures (HTML with hover + PNG), MOSAIC style; one blue ramp for the ordered classes (light =
+                          clustered ... dark = uniform), marker shapes as a second cue for colour-blind readers.
+
+Why statistics were chosen this way (for a "methods" paragraph):
+- Rank-based tests (Kruskal-Wallis, Mann-Whitney) + Cliff's delta because bridge counts are small, bounded, and not normal.
+- Holm correction because all 10 class pairs are tested.
+- A per-lysine model (GEE, exchangeable within run) because the mechanism acts on individual lysines and the 130 runs have
+  too few degrees of freedom to see it at run level; GEE accounts for lysines in the same run being correlated.
+
+------------------------------------------------------
+Frozen definitions (settings.yaml) and honesty note
+------------------------------------------------------
+settings.yaml was written BEFORE any network-topology, height, timing or per-lysine quantity was computed. It fixes the
+primary response, secondary responses, production window, how heights are measured, the tests, the per-lysine model
+predictors, and the optimality rule.
+- Production window: frames 1428-5713 (discard first 100 ns, keep 300 ns), same as SubM4.
+- Bond height = midpoint z of the two bonded beads, every production frame after the bond formed. Brush h50/h95 mass-weighted.
+- RGD height = mean z of the R, G, D beads of the four GRGDS motifs; also fraction above h50 (exposure proxy).
+- HONEST DISCLOSURE (keep this wording on the wiki): before freezing, the per-class MEAN bridge counts had been seen once in
+  a data check of the event logs (uniform ~18.5, scramble ~18.6, random ~13.4, focused ~7.0, clustered ~3.1). So the class
+  RANKING on the primary response is NOT a blind result. Everything else (network topology, z distributions, timing,
+  per-lysine outcomes, descriptor effects) was computed after freezing.
+- Dated notes at the end of settings.yaml record what changed in interpretation afterwards (the optimality gate, and
+  uniform = scramble).
+
+======================================================================================
+5. RESULTS: COMPARING THE ARRANGEMENTS (stats/summary.txt, figures/class_comparison, z_profiles, bridge_timecourse)
+======================================================================================
+Medians per class (n = 17 / 25 / 43 / 25 / 20):
+
+                                       clustered focused random uniform scramble
+  bridges (PRIMARY)                        3        7      14      19     19.5     (Kruskal-Wallis p = 1e-20)
+  loops                                   16       14       8       3      2.5
+  crosslinks formed (of max 22)           19       21      22      22      22
+  distinct chain pairs bridged             3        7      13      18      18
+  largest connected cluster (of 16)      0.13     0.19    0.69    0.94    0.94
+  % runs with ALL 16 chains connected      0        0      14      48      45
+  cycle rank                               0        0       2       5       5
+  bridge height above wall (nm)           1.5      2.2     6.1     7.2     7.3
+  fraction of bridges above h50           0.00     0.00    0.55    0.70    0.70
+  brush h95 (nm)                         14.2     13.3    13.5    12.6    12.7      (p = 5e-4)
+  RGD height (nm)                         6.7      6.4     6.4     6.2     6.2      (p = 0.05)
+  Rg (nm)                                5.75     5.56    5.44    5.25    5.26
+
+Key points:
+1. CROSSLINKING SATURATES. Random, uniform and scramble almost always form all 22 possible bonds. In clustered designs ~7
+   lysines (median) stay unreacted because their partners on the same chain are used up or pinned. So "how many crosslinks"
+   is the wrong question; "how many are bridges" is the right one.
+2. Every pair of classes differs on bridges (Holm p < 1e-4, Cliff's delta -0.75 to -1.0), EXCEPT uniform vs scramble
+   (p = 0.94, delta 0.01 [-0.32, 0.35]). Uniform and scramble differ on none of the 23 responses (all Holm p > 0.6), so the
+   scramble sheet is effectively a second uniform set. Report both; pool as "one per block" (48 runs, median 19 bridges)
+   where useful.
+3. WHERE THE NETWORK SITS (z-structure). In clustered and focused designs every crosslink, bridge or loop, lies within ~3 nm
+   of the wall (0 % of bridges above h50): the pinned lysine pulls its whole K block down, so all reactions happen in the
+   surface layer. In spread designs bridges peak at 6-7 nm, above the mass peak, ~70 % of them above h50. The brush itself
+   barely changes: h50 5.4-5.7 nm (not significant), h95 within 1.6 nm.
+4. RGD EXPOSURE is not affected by placement (RGD height p = 0.05, fraction above h50 p = 0.24). Choosing a placement for
+   crosslinking costs nothing in RGD presentation. (Wiki: say "no significant effect", not "proven equal".)
+5. TIMING. Half of the final bridges form within ~5 ns of crosslinking starting in every class except clustered (~17 ns). The
+   last bonds appear up to ~390 ns later, so the network is still finishing in some runs. Event times are descriptive only,
+   they are NOT kinetics.
+6. RUN-LEVEL DESCRIPTORS (stats/descriptor_glm.csv, quasi-binomial on bridges/22): log minimum K-K spacing, odds ratio 1.9 per
+   e-fold (p < 1e-6); number of blocks carrying K, OR 1.5 per block; K centroid irrelevant. Pseudo-R2 0.76, CV R2 0.80.
+   Within the random class only spacing matters (number of blocks p = 0.68). The class label still adds information beyond
+   these descriptors (p = 8e-8); the per-lysine model (section 6) resolves this: what counts is each lysine's OWN nearest
+   neighbour, not the chain's minimum.
+
+------------------------------------------------------
+The optimality rule and what happened to it
+------------------------------------------------------
+Frozen rule (settings.yaml): (1) most bridges; (2) a class/design counts as optimal only if its network is connected (all 16
+chains) in >= 90 % of its runs; (3) among ties, more distinct pairs bridged, then smaller between-run spread (IQR).
+RESULT: step 2 is met by NO class (best is uniform at 48 %). With 4 lysines per chain and 19 of 64 pinned, one fully
+connected network is not reliable for any arrangement at this density. The rule was left unchanged and reported as failing;
+this is a finding, not a bug. A future rule should state connectivity as a reported outcome, or use a gate grounded in a
+target (e.g. a percolation requirement) set in advance. On the primary response and every tie-break, uniform and scramble
+(one lysine per block) come first and are indistinguishable.
+
+======================================================================================
+6. THE MECHANISM: THE PER-LYSINE MODEL (stats/lysine_model.txt, figures/lysine_bridge_probability, lysine_model_check)
+======================================================================================
+Unit: each of the 5850 free (non-pinned) lysines (130 runs x 45). Logistic GEE, exchangeable within run, for P(bridge) and
+P(loop). Predictors were fixed in advance: log distance (residues) to the nearest other K on the same chain; number of other
+K within 30 residues; whether that nearest K is pinned; relative position along the chain (linear + quadratic).
+
+  P(bridge) predictor                         odds ratio [95 % CI]       p
+  log distance to nearest other K on chain    3.43 per e-fold [2.98, 3.95]   < 1e-16
+  other K within 30 residues                  0.94 [0.81, 1.09]              0.42
+  nearest K is pinned                         1.51 [1.20, 1.90]              5e-4
+  position along chain (linear, quadratic)    n.s.                           0.23, 0.41
+
+- P(loop) mirrors it: OR 0.35 per e-fold of distance; 0.41 if the nearest K is pinned.
+- Plain-language explanation: lysines that sit close together on a chain find each other first and react (first encounter,
+  irreversible, valence 1), forming a loop and using themselves up. Lysines far from any chain-mate are more likely to meet a
+  lysine on a different chain. A pinned neighbour helps because a pinned lysine cannot be a loop partner.
+- Reading the curve: nearest neighbour 5 residues away -> ~13 % chance of a bridge; ~20 residues -> ~50 %; ~60 -> ~80 %;
+  >100 -> ~90 %. ("e-fold" = multiply the distance by e = 2.718.)
+- Position along the chain and which block the K is in do NOT matter once the neighbour distance is known.
+- Held-out check: expected bridges per run = sum of P(bridge) / 2 over its free lysines; 10-fold CV by run gives R2 = 0.88,
+  RMSE 2.2 bridges. Class means reproduced within 1 bridge (clustered 3.06 obs vs 3.67 pred; focused 7.00 vs 6.09; random
+  13.42 vs 13.52; uniform 18.48 vs 18.77; scramble 18.55 vs 18.78).
+
+======================================================================================
+7. HOW TO OPTIMISE PLACEMENT: THE DESIGN SEARCH (stats/design_*.csv, figures/design_rule)
+======================================================================================
+- We scored ALL 211 876 ways to put 4 K on the 49 non-M VPGXG positions (C(49,4)), averaging over pinning analytically (each K
+  pinned with probability 19/64), expected bridges per 16 chains. Range over all designs: 2.7 to 20.1. 99.5 % of designs lie
+  inside the data range of the nearest-neighbour distance (recommendations are only made inside that range).
+- Best achievable expected bridges by minimum K-K spacing:
+
+    minimum spacing (residues)     5     20     40     60     80    100
+    best expected bridges        12.2   16.1   18.4   19.3   19.8   20.0
+
+  Rises steadily, then levels off.
+- Top designs (e.g. 1R5G10D11, 1R4G10D11, 3R5G10D11, 1R3G8D11, 2R4G9D10; ~20.05 [19.6, 20.5] expected bridges) all put the
+  lysines ~100-105 residues apart: the most even spacing the 14-11-15-11 block layout allows, and inside the simulated range
+  (one simulated design reaches 105). The best design stays in the 19.6-20.5 band in all 200 parameter draws.
+- Their predicted advantage over a good uniform design (~19.5) is about HALF a bridge, smaller than the run-to-run spread
+  (SD 2-3 within uniform and scramble). So the top is a PLATEAU, not a single winner.
+- DESIGN RULE: maximise the smallest sequence distance between any two lysines on a chain.
+    * aim for >= 60 residues (within ~1 bridge of the optimum);
+    * ideally even spacing, ~100 residues for 4 K on 357 residues (one K per block, spread within the blocks);
+    * never place two lysines within ~20 residues of each other (below that, loops win);
+    * where along the chain, and in which block, does not matter beyond that.
+
+======================================================================================
+8. CAVEATS (state these on the wiki)
+======================================================================================
+- No replicates: one design = one run, ~+-2-3 bridges of run-to-run noise. Confirm the top designs with 3 replicates each
+  before claiming a specific winner.
+- The class ranking on the primary response is not blind (section 4).
+- The optimality connectivity gate (>= 90 % connected) failed for every class (section 5).
+- Crosslinking is first-encounter and irreversible (p = 1). Lower reaction probabilities may favour bridges more, since close
+  neighbours would no longer win every race. The ranking should hold; the size of the gaps may not.
+- "Connected" ignores the surface: chains linked only through their pins count as separate.
+- The per-lysine model treats lysines as independent given the predictors; valence-1 competition is absorbed into the
+  coefficients (the run-level check shows it works over this design space).
+- Single density (0.04 chains/nm2) on a wall, 0.19 M, 293.15 K. How heights and networks carry over to a bulk gel is open.
+- Class and spacing are almost the same variable, which is why the per-lysine model (not the class label) is used for the
+  mechanism.
+
+======================================================================================
+9. FILES (all under analysis_lysplace/)
+======================================================================================
+README.md           full write-up (the source for this note)
+settings.yaml       frozen definitions + dated notes
+run_inventory.csv   design table: K positions, descriptors, metadata, QC (130 runs)
+runs_metrics.csv    one row per run: design, network (end and 100 ns), timing, heights, chain size
+per_lysine.csv      8320 lysines: block, repeat, state (pinned/bridge/loop/unreacted), partner, formation time, height, predictors
+per_bond.csv        2750 crosslinks: kind, chains, residues, formation time, height over production
+profiles.npz        production z profiles per run (mass, lysines, bridges, loops, RGD), 2 A bins
+timeseries/         per-run extraction (<run>.npz)
+stats/              summary.txt, class_summary.csv, class_tests.csv, pairwise.csv, descriptor_glm.csv, optimal.txt,
+                    lysine_gee_bridge.csv, lysine_gee_loop.csv, lysine_model_cv.csv, design_ranking.csv, design_top.csv,
+                    design_rule.csv, lysine_model.txt
+figures/            HTML (hover) + PNG of each:
+                      class_comparison            6 panels: bridges, loops, pairs bridged, connected cluster, bridge height, bridges above h50
+                      z_profiles                  density vs height per class: all beads, bridges, loops, RGD
+                      lysine_bridge_probability   P(bridge)/P(loop) vs distance to nearest K, observed bins with CIs + model
+                      lysine_model_check          held-out predicted vs observed bridges
+                      design_rule                 bridges vs minimum spacing, model best/median plus simulated runs
+                      bridge_timecourse           bridges vs time per class
+scripts/            00_inventory.py ... 05_figures.py, common.py, extract.sbatch, run_all.sh
+logs/               extraction job log
+
+======================================================================================
+10. REPRODUCE
+======================================================================================
+From the repository root (packages layered by analysis/scripts/run.sh, seed 20261016):
+    analysis_lysplace/scripts/run_all.sh
+    # = .venv/bin/python analysis_lysplace/scripts/00_inventory.py
+    #   sbatch analysis_lysplace/scripts/extract.sbatch      (or 01_extract.py --workers 8; ~12 s per run)
+    #   analysis/scripts/run.sh analysis_lysplace/scripts/02_metrics.py
+    #   analysis/scripts/run.sh analysis_lysplace/scripts/03_compare.py
+    #   analysis/scripts/run.sh analysis_lysplace/scripts/04_lysine_model.py
+    #   analysis/scripts/run.sh analysis_lysplace/scripts/05_figures.py
+New runs: add the sheet to SHEETS in scripts/common.py (the class comes from the name suffix) and rerun. Step 1 only
+extracts runs that have no .npz yet.
+
+======================================================================================
+11. SUGGESTED WIKI STRUCTURE FOR THIS SECTION
+======================================================================================
+1. Aim and why bridges vs loops matter (section 1) + glossary (section 2)
+2. System and data: construct, the five classes, run-name code (section 3)
+3. Methods: pipeline, frozen definitions, honesty note (section 4)
+4. Results: class comparison table + z-structure + RGD exposure (section 5)
+5. Mechanism: nearest-neighbour distance and the per-lysine model (section 6)
+6. Optimal design and design rule, and what "optimal" means / the failed gate (sections 5 end + 7)
+7. Caveats and next steps: replicate the top designs x3; test lower reaction probability; define a connectivity target in advance (section 8)
+8. Reproducibility (sections 9-10)
+Suggested figures to embed: class_comparison, z_profiles, lysine_bridge_probability, design_rule.
