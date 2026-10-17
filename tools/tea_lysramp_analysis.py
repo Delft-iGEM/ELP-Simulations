@@ -8,7 +8,8 @@ against the theta-state Rg, collapse fraction, extent, K-K contacts, RGD and
 23-mer SASA) plus the whole-chain SASA. RGD and 23-mer SASA are divided by the
 number of copies (4 in every sequence here), so they read per binding site.
 Unfinished runs are skipped; re-run once they are in. Writes figures/g6-kspc-kend/g6-lysramp.csv
-and figures/g6-kspc-kend/g6-lysramp-{rg,rgd-sasa,chain-sasa}.png.
+and figures/g6-kspc-kend/g6-lysramp-{rg,rg-both,rgd-sasa,chain-sasa}.png, with the lysine
+count on the x axis as % of the 49 replaceable pentads.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from tools.tea_lysramp import COUNTS, SERIES, TEMPERATURES
 SASA_STRIDE = 10
 DISCARD_NS = 50.0
 N_SITES = 4
+N_REPLACEABLE = 49           # pentads that can be VPGKG; the x axis is n / 49 in %
 
 
 def run_name(series: str, n: int, t: float) -> str:
@@ -73,6 +75,7 @@ STYLE = {"kspc": ("spaced", "-", "o"), "kend": ("from both ends", (0, (4, 2)), "
 
 
 PANELS = [("rg", "rg_nm", "rg_sem_nm", "Radius of gyration (nm)"),
+          ("rg-both", "rg_nm", "rg_sem_nm", "Radius of gyration (nm)"),
           ("rgd-sasa", "rgd_sasa_per_site_nm2", "rgd_sasa_sem_per_site_nm2",
            "SASA per RGD (nm²)"),
           ("chain-sasa", "chain_sasa_nm2", "chain_sasa_sem_nm2", "SASA, whole chain (nm²)")]
@@ -87,6 +90,11 @@ def plot(rows: list[dict], out_dir: Path) -> None:
     temps = [(int(T), c) for T, c in zip(TEMPERATURES, (COLD, HOT))]
     out_dir.mkdir(parents=True, exist_ok=True)
     for tag, key, sem, label in PANELS:
+        # the Rg figures are slide versions: transparent, untitled; rg has the spaced
+        # series only, rg-both the spaced and the from-both-ends series
+        slide = tag.startswith("rg")
+        styles = {"kspc": STYLE["kspc"]} if tag == "rg" else STYLE
+        ring = dict(mec=SURFACE, mew=0 if slide else 1.3)   # no surface halo when transparent
         fig, ax = plt.subplots(figsize=(6.8, 4.8))
         fig.patch.set_facecolor(SURFACE)
         ax.set_facecolor(SURFACE)
@@ -98,7 +106,7 @@ def plot(rows: list[dict], out_dir: Path) -> None:
         ax.grid(color=GRID, linewidth=0.6)
         ax.set_axisbelow(True)
         for T, colour in temps:
-            for series, (_, ls, marker) in STYLE.items():
+            for series, (_, ls, marker) in styles.items():
                 pts = sorted((x["n_lys"], x[key], x[sem]) for x in rows
                              if x["series"] == series
                              and int(round(x["temperature_K"])) == T
@@ -106,9 +114,10 @@ def plot(rows: list[dict], out_dir: Path) -> None:
                 if not pts:
                     continue
                 n, y, e = map(np.array, zip(*pts))
+                n = 100 * n / N_REPLACEABLE
                 ax.plot(n, y, color=colour, linewidth=2, linestyle=ls, zorder=2)
                 ax.errorbar(n, y, yerr=e, fmt=marker, ms=6.5, color=colour, ecolor=colour,
-                            elinewidth=1, capsize=0, mec=SURFACE, mew=1.3, zorder=3)
+                            elinewidth=1, capsize=0, zorder=3, **ring)
         if key == "rg_nm":
             theta = rows[0]["rg_theta_nm"]
             ax.axhline(theta, color=MUTED, linewidth=1, linestyle=(0, (1, 2)), zorder=1)
@@ -116,18 +125,38 @@ def plot(rows: list[dict], out_dir: Path) -> None:
                     transform=ax.get_yaxis_transform(),
                     va="bottom", ha="right", fontsize=8, color=MUTED)
         ax.set_ylabel(label, fontsize=9.5, color=INK)
-        ax.set_xlabel("VPGKG pentads (of 49 replaceable)", fontsize=9, color=MUTED)
-        ax.set_xticks(COUNTS)
-        handles = ([plt.Line2D([], [], color=c, lw=2, label=f"{T} K") for T, c in temps]
-                   + [plt.Line2D([], [], color=MUTED, lw=2, linestyle=ls, marker=m, ms=6.5,
-                                 mec=SURFACE, label=lab) for lab, ls, m in STYLE.values()])
-        ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=4,
+        if slide:
+            ax.set_xlabel("Percentage of replaced pentades (VPGIG → VPGKG)", fontsize=9.5,
+                          color=INK)
+        else:
+            ax.set_xlabel(f"Lysine pentads, % of the {N_REPLACEABLE} replaceable pentads "
+                          f"(VPGKG; the rest VPGIG)", fontsize=9, color=MUTED)
+        ax.set_xticks([100 * c / N_REPLACEABLE for c in COUNTS])
+        ax.xaxis.set_major_formatter(lambda v, _: f"{v:.0f}%")
+        if slide:
+            handles = [plt.Line2D([], [], color=c, lw=2, marker="o", ms=6.5, label=f"{T} K",
+                                  **ring) for T, c in temps]
+            if tag == "rg-both":
+                handles = ([plt.Line2D([], [], color=c, lw=2, label=f"{T} K") for T, c in temps]
+                           + [plt.Line2D([], [], color=INK, lw=2, linestyle=ls, marker=m,
+                                         ms=6.5, mew=0, label=f"lysines {lab}")
+                              for lab, ls, m in STYLE.values()])
+        else:
+            handles = ([plt.Line2D([], [], color=c, lw=2, label=f"{T} K") for T, c in temps]
+                       + [plt.Line2D([], [], color=MUTED, lw=2, linestyle=ls, marker=m, ms=6.5,
+                                     mec=SURFACE, label=lab) for lab, ls, m in STYLE.values()])
+        ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.13),
+                  ncol=2 if tag == "rg-both" else 4,
                   frameon=False, fontsize=8.5, labelcolor=INK, handlelength=3)
-        ax.set_title(f"{label.split(' (')[0]}, lysine ramp on the 357-aa RGD construct",
-                     loc="left", fontsize=10.5, color=INK, fontweight="bold")
+        if not slide:
+            ax.set_title(f"{label.split(' (')[0]}, lysine ramp on the 357-aa RGD construct",
+                         loc="left", fontsize=10.5, color=INK, fontweight="bold")
         fig.tight_layout()
         out = out_dir / f"g6-lysramp-{tag}.png"
-        fig.savefig(out, dpi=200, facecolor=SURFACE)
+        if slide:
+            fig.savefig(out, dpi=200, transparent=True)
+        else:
+            fig.savefig(out, dpi=200, facecolor=SURFACE)
         plt.close(fig)
         print(f"wrote {out}")
 

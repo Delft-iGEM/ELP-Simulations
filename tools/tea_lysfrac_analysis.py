@@ -11,7 +11,7 @@ collapse fraction, extent, K-K contacts) plus two SASAs the g6 set did not need:
                lysines, so 10 % and 100 % read on the same per-residue scale
 
 These chains have no RGD, so the g6 script's RGD and 23-mer SASA columns are
-dropped. Writes figures/g6-kfrac/g6-kfrac.{csv,png}.
+dropped. Writes figures/g6-kfrac/g6-kfrac.{csv,png} and g6-kfrac-rg.png (the Rg\npanel alone, untitled).
 """
 
 from __future__ import annotations
@@ -133,6 +133,49 @@ def plot(rows: list[dict], out: Path) -> None:
     print(f"wrote {out}")
 
 
+def plot_rg(rows: list[dict], out: Path) -> None:
+    """The Rg panel alone, no title."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(GRID)
+    ax.tick_params(colors=MUTED, labelsize=8.5)
+    ax.grid(color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    for t, c in ((285, COLD), (370, HOT)):
+        pts = sorted((r["lys_pct"], r["rg_nm"], r["rg_sem_nm"]) for r in rows
+                     if int(round(r["temperature_K"])) == t and not math.isnan(r["rg_nm"]))
+        x, y, e = map(np.array, zip(*pts))
+        ax.plot(x, y, color=c, linewidth=2, zorder=2)
+        ax.errorbar(x, y, yerr=e, fmt="o", ms=7, color=c, ecolor=c, elinewidth=1,
+                    capsize=0, mec=SURFACE, mew=1.5, zorder=3)
+        ax.annotate(f"{t} K", (x[-1], y[-1]), xytext=(6, 0), textcoords="offset points",
+                    va="center", fontsize=9, color=INK)
+    theta = rows[0]["rg_theta_nm"]
+    ax.axhline(theta, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+    ax.text(1, theta, " θ-state Rg", transform=ax.get_yaxis_transform(),
+            va="bottom", ha="right", fontsize=8.5, color=MUTED)
+    ax.set_xlabel("pentads that are VPGKG (%)", fontsize=9.5, color=INK)
+    ax.set_ylabel("Radius of gyration (nm)", fontsize=9.5, color=INK)
+    ax.set_xticks(FRACTIONS)
+    ax.set_xlim(-4, 110)
+    handles = [plt.Line2D([], [], marker="o", color=c, mec=SURFACE, ms=7, label=f"{t} K")
+               for t, c in ((285, COLD), (370, HOT))]
+    ax.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2,
+              frameon=False, fontsize=9, labelcolor=INK)
+    fig.tight_layout()
+    fig.savefig(out, dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+    print(f"wrote {out}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -163,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"{r['collapse_fraction']:>6.0%}{r['span_p99_nm']:>7.1f}"
                   f"{r['chain_sasa_nm2']:>8.1f}{r['lys_sasa_per_k_nm2']:>7.3f}")
     plot(rows, args.out)
+    plot_rg(rows, args.out.with_name(args.out.stem + "-rg.png"))
     return 0
 
 
