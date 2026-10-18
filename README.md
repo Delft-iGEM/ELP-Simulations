@@ -31,9 +31,8 @@ To plan, submit and analyse a whole batch of runs from one CSV, use
 
 | Path | Contents |
 | --- | --- |
-| `simulations/<name>/` | One folder per run: `prepare.py`, plus `analysis/` (committed) and `runtime/` (generated, not committed) |
+| `simulations/<name>/` | One folder per run: `prepare.py`, plus generated `analysis/` and `runtime/` (not committed) |
 | `batches/` | Batch CSVs, one row per run (`Example-csv.csv` is the template) |
-| `results/` | Contact and SASA result tables |
 | `tools/` | The `sim` CLI, model code and analysis scripts |
 | `template/` | `run.py` and `job.sh` copied into each run |
 | `tests/` | `uv run pytest tests -q` |

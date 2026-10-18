@@ -54,3 +54,13 @@ docs/_build/
 .DS_Store
 # Audit scratch simulations (branch robust-audit) — CPU smoke tests, not results
 simulations/zz-audit-*
+
+# Generated outputs — regenerate with analyze.ipynb / tools/, never commit
+results/
+figures/
+analysis/
+analysis_lysplace/
+simulations/*/analysis/
+example-simulations/*/analysis/
+docs/smoke-logs/
+*.xlsx

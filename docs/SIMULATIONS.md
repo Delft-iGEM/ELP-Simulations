@@ -33,9 +33,8 @@ idempotently, so running prepare on any machine produces the exact same result.
 
 The Analyze section of `analyze.ipynb` writes its results — the equilibration
 verdict, the crosslinking counts, every plot — into `analysis/`, next to
-`prepare.py` (`simulations/<sim_name>/analysis/`). Unlike `runtime/`, `analysis/`
-**is** committed: it's small (text + PNGs), so pushing it is how a DelftBlue
-checkout gets the same numbers and figures without re-running the notebook there.
+`prepare.py` (`simulations/<sim_name>/analysis/`). Like `runtime/`, `analysis/`
+is generated output and is not committed: re-run the notebook to regenerate it.
 
 ## Preparing and running simulations
 
