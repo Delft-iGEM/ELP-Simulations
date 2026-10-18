@@ -25,6 +25,7 @@ LOCAL_SHEETS = [
     "CHR_sub4_RUN_2.csv",   # sub4-extra2 (20) + sub4-extra3 (10)
     "CHR_sub4_RUN_3.csv",   # sub4-extra4 (30)
     "CHR_sub4_RUN_4.csv",   # sub4-extra5 01-14 (14 of the planned 20)
+    "rerun_A10-A19_nonreactive_30.csv",   # A10-A19 x3 rerun with crosslinking off (-nr-repN); unfinished ones stay "incomplete"
 ]
 # Run sheets submitted by a teammate (Titus, commit 0d88132, merged in 6725a2d). Their
 # trajectories live on /scratch/tnartey, which is not readable from this account; what

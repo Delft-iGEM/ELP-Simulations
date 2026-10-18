@@ -15,5 +15,6 @@ $RUN analysis/scripts/05_figures.py
 $RUN analysis/scripts/06_reactive.py
 $RUN analysis/scripts/07_models.py
 $RUN analysis/scripts/05_figures.py --stats analysis/export/models/inter_log --out analysis/export/figures_logcoded --coding log
+$RUN analysis/scripts/10_wiki_figures.py      # transparent wiki figures -> analysis/export/figures_wiki/
 $RUN analysis/scripts/08_video_runs.py --workers "${WORKERS:-4}"
 $RUN analysis/scripts/09_export.py

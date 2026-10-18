@@ -1,19 +1,19 @@
 {
  "runs_in_fits": {
-  "inter": 104,
-  "intra": 104,
-  "interfrac": 104
+  "inter": 122,
+  "intra": 122,
+  "interfrac": 122
  },
  "near_base_dots": {
-  "concentration": 10,
-  "chain_length": 20,
+  "concentration": 16,
+  "chain_length": 26,
   "spacing_pct": 14,
-  "ionic_strength": 20
+  "ionic_strength": 23
  },
  "reactive": {
-  "spearman": 0.9030303030303028,
-  "pearson": 0.9717024394493732,
-  "spearman_glm": 0.8666666666666665,
-  "pearson_glm": 0.9788806346714816
+  "spearman": 0.9636363636363635,
+  "pearson": 0.968099031357462,
+  "spearman_glm": 0.9151515151515152,
+  "pearson_glm": 0.9733358062113794
  }
 }

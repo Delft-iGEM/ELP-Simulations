@@ -1,13 +1,13 @@
 # Manifest — SubM4 export
 
-Generated 2026-10-16 08:05 by `analysis/scripts/09_export.py`. Repository HEAD: `6725a2d` (2026-10-15 18:50:54 +0200).
+Generated 2026-10-17 14:07 by `analysis/scripts/09_export.py`. Repository HEAD: `6539b98` (2026-10-16 13:04:10 +0200).
 
 The analysis scripts are **not committed** (`analysis/` is untracked in git), so no commit identifies them; their SHA-256 hashes at export time are listed below, and `scripts/` holds the copies.
 
 | script | SHA-256 |
 |---|---|
-| `00_inventory.py` | `83fba234b9c2d0b7b1d6f4ade93b10ab749297796d8bbc60b82ca0651b70385d` |
-| `01_extract_timeseries.py` | `fee995eb5ee8d163cd7f68015df7c3aa15b644c4fc1fc5cada39a71de5118e79` |
+| `00_inventory.py` | `49ccd4fcac5f6ab505563a9e5d06ffac821d2aff93a3086290d4fd2d7a690419` |
+| `01_extract_timeseries.py` | `8661e5a88b9ecdbe1305f0f3718e4823c9b278c16341f2341ddc71328bad5481` |
 | `02_equilibration.py` | `9164998e51e61e98e317caa17be3a22ba3da3355625ba56939722b93ed3fb425` |
 | `03_metrics.py` | `8c24e761ba4aa430e989b48c6c2311f565870107f1bd48376edcc490442b24ef` |
 | `04_stats.py` | `fe5c3b845e99c2f0a664e24dd2e09f475300afefb6c1092a0719605b245407be` |
@@ -16,18 +16,19 @@ The analysis scripts are **not committed** (`analysis/` is untracked in git), so
 | `07_models.py` | `1e38c00e81e178f0a13ac34fe5b4c74960c0ff6a4283b418820481deb31730ed` |
 | `08_video_runs.py` | `4590666a77e43acadfbbd5561e811ff207b12b817baaa8a6b67f64b934960afc` |
 | `09_export.py` | `15cd5eaa6a5af3762afc0625e880141f1ca6ef55a5ef41771a609745743bbccd` |
-| `common.py` | `09931915ed7e6b10335528e9282170d03f45bee08b225c6a5791358056456021` |
+| `10_wiki_figures.py` | `e43485d19f9898381bf584fb25bec6f634e663ba1d3d19fa9cc79c8f07feffac` |
+| `common.py` | `f420bc076b6e0fde9833c3ac890febc41043c4f40eeb2914c86bfb6cca0f6a15` |
 | `extract.sbatch` | `ac2d22c1d0181d60530ba1ef71171eb8ee3452ece19f1cdabb10ae019e443385` |
 | `model.py` | `8df9474b17e07fdbc492226bf7e480fbf560609990562a48cb50a9a23a5f2235` |
 | `run.sh` | `44dbb731428e4ef414b14d1931aa074abac2aaaf1a290233f5de65a8907181b5` |
-| `run_all.sh` | `08b8311fb5547f58ac4d3346ecb3978cfba2a2a8bcf2356a600e38c0f75ea35b` |
-| `style.py` | `dee0745247fd93078cc376470c53266856bfe7ff017324f115b46c2be2340fcc` |
+| `run_all.sh` | `bfbe504d526ca3fa0e5dbafd6058567a0ae34fa35988bae3511c56ae1c7fc7d0` |
+| `style.py` | `303de85529c82cb7b579785d4135c5349c7b978f4c0231dbfd1b3f876c998f30` |
 
 ## Files
 
 Paths are relative to `export/`. Sizes in kB. Columns are given for CSV files.
 
-### `MANIFEST.md` (34 kB)
+### `MANIFEST.md` (38 kB)
 
 This file.
 
@@ -35,7 +36,7 @@ This file.
 
 Handoff: what is here, what is new, what could not be done, how to regenerate.
 
-### `analysis_README.md` (27 kB)
+### `analysis_README.md` (31 kB)
 
 The full analysis write-up (analysis/README.md): methods, QC, results, open questions.
 
@@ -43,7 +44,7 @@ The full analysis write-up (analysis/README.md): methods, QC, results, open ques
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/coefficients.png` (112 kB)
+### `figures/coefficients.png` (115 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
@@ -51,55 +52,55 @@ Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_REA
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/importance_comparison.png` (120 kB)
+### `figures/importance_comparison.png` (118 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/noise_check_anchors.html` (12 kB)
+### `figures/noise_check_anchors.html` (13 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/noise_check_anchors.png` (177 kB)
+### `figures/noise_check_anchors.png` (181 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/predicted_vs_heldout.html` (19 kB)
+### `figures/predicted_vs_heldout.html` (20 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/predicted_vs_heldout.png` (163 kB)
+### `figures/predicted_vs_heldout.png` (162 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/qc_timeseries_sample_inter_free_12A.html` (2507 kB)
+### `figures/qc_timeseries_sample_inter_free_12A.html` (2508 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/qc_timeseries_sample_inter_free_12A.png` (436 kB)
+### `figures/qc_timeseries_sample_inter_free_12A.png` (440 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/qc_timeseries_sample_rg_mean_A.html` (4298 kB)
+### `figures/qc_timeseries_sample_rg_mean_A.html` (4315 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/qc_timeseries_sample_rg_mean_A.png` (672 kB)
+### `figures/qc_timeseries_sample_rg_mean_A.png` (673 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/residual_diagnostics.html` (35 kB)
+### `figures/residual_diagnostics.html` (40 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/residual_diagnostics.png` (193 kB)
+### `figures/residual_diagnostics.png` (186 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/response_surface_2x2.html` (337 kB)
+### `figures/response_surface_2x2.html` (336 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/response_surface_2x2.png` (570 kB)
+### `figures/response_surface_2x2.png` (536 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
@@ -107,7 +108,7 @@ Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_REA
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
-### `figures/response_surface_base.png` (292 kB)
+### `figures/response_surface_base.png` (264 kB)
 
 Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_README.md §8.
 
@@ -115,7 +116,7 @@ Frozen-model figures (Plotly HTML with hover, and PNG); captions in analysis_REA
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/coefficients.png` (118 kB)
+### `figures_logcoded/coefficients.png` (114 kB)
 
 The same figures for the log-coded primary model.
 
@@ -123,39 +124,39 @@ The same figures for the log-coded primary model.
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/importance_comparison.png` (124 kB)
+### `figures_logcoded/importance_comparison.png` (122 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/noise_check_anchors.html` (12 kB)
+### `figures_logcoded/noise_check_anchors.html` (13 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/noise_check_anchors.png` (177 kB)
+### `figures_logcoded/noise_check_anchors.png` (181 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/predicted_vs_heldout.html` (19 kB)
+### `figures_logcoded/predicted_vs_heldout.html` (20 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/predicted_vs_heldout.png` (164 kB)
+### `figures_logcoded/predicted_vs_heldout.png` (163 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/residual_diagnostics.html` (35 kB)
+### `figures_logcoded/residual_diagnostics.html` (40 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/residual_diagnostics.png` (194 kB)
+### `figures_logcoded/residual_diagnostics.png` (187 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/response_surface_2x2.html` (337 kB)
+### `figures_logcoded/response_surface_2x2.html` (336 kB)
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/response_surface_2x2.png` (578 kB)
+### `figures_logcoded/response_surface_2x2.png` (514 kB)
 
 The same figures for the log-coded primary model.
 
@@ -163,9 +164,157 @@ The same figures for the log-coded primary model.
 
 The same figures for the log-coded primary model.
 
-### `figures_logcoded/response_surface_base.png` (303 kB)
+### `figures_logcoded/response_surface_base.png` (260 kB)
 
 The same figures for the log-coded primary model.
+
+### `figures_wiki/README.md` (9 kB)
+
+
+### `figures_wiki/bridges_vs_loops.png` (301 kB)
+
+
+### `figures_wiki/bridges_vs_loops.svg` (84 kB)
+
+
+### `figures_wiki/coefficients.png` (114 kB)
+
+
+### `figures_wiki/coefficients.svg` (21 kB)
+
+
+### `figures_wiki/data/bridges_vs_loops.json` (68 kB)
+
+
+### `figures_wiki/data/bridges_vs_loops_panelA.csv` (1 kB)
+
+
+Columns: `series`, `parameter`, `ratio_high_over_low`, `ci_low`, `ci_high`
+
+### `figures_wiki/data/coefficients.json` (1 kB)
+
+
+### `figures_wiki/data/effect_curves.json` (24 kB)
+
+
+### `figures_wiki/data/effect_curves_endpoints.csv` (1 kB)
+
+
+Columns: `parameter`, `low_value`, `high_value`, `base_value`, `base_pred`, `low_pred`, `high_pred`, `fold_low_vs_base`, `fold_high_vs_base`, `n_runs_near_base`
+
+### `figures_wiki/data/importance_comparison.json` (1 kB)
+
+
+### `figures_wiki/data/knobs_fold_change.csv` (1 kB)
+
+
+Columns: `parameter`, `low_vs_base`, `low_ci_low`, `low_ci_high`, `high_vs_base`, `high_ci_low`, `high_ci_high`, `high_over_low`
+
+### `figures_wiki/data/knobs_fold_change.json` (1 kB)
+
+
+### `figures_wiki/data/model_comparison.csv` (2 kB)
+
+
+Columns: `model`, `coding`, `n_runs`, `n_design_points`, `R2`, `adj_R2`, `cv5_grouped_R2`, `lof_F`, `lof_df_num`, `lof_df_den`, `lof_p`, `n_runs_without_extra2_05`, `lof_F_without_extra2_05`, `lof_df_num_without_extra2_05`, `lof_p_without_extra2_05`, `fold_concentration`, `fold_concentration_ci_low`, `fold_concentration_ci_high`, `fold_chain_length`, `fold_chain_length_ci_low`, `fold_chain_length_ci_high`, `fold_spacing_pct`, `fold_spacing_pct_ci_low`, `fold_spacing_pct_ci_high`, `fold_ionic_strength`, `fold_ionic_strength_ci_low`, `fold_ionic_strength_ci_high`, `lmg_share_concentration`, `lmg_share_chain_length`, `lmg_share_spacing_pct`, `lmg_share_ionic_strength`
+
+### `figures_wiki/data/noise_check_anchors.json` (1 kB)
+
+
+### `figures_wiki/data/predicted_vs_heldout.json` (7 kB)
+
+
+### `figures_wiki/data/qc_timeseries_sample_inter_free_12A.json` (1484 kB)
+
+
+### `figures_wiki/data/reactive_bridge_fraction.json` (1 kB)
+
+
+### `figures_wiki/data/residual_diagnostics.json` (21 kB)
+
+
+### `figures_wiki/data/response_surface_2x2.json` (133 kB)
+
+
+### `figures_wiki/data/response_surface_base.json` (35 kB)
+
+
+### `figures_wiki/data/run_info.json` (0 kB)
+
+
+### `figures_wiki/data/tissue_bands.csv` (2 kB)
+
+
+Columns: `tissue`, `k`, `E_low_kPa`, `E_high_kPa`, `G_low_kPa`, `G_high_kPa`, `proxy_low`, `proxy_high`, `map_min`, `map_max`, `reachable_on_map`, `fully_inside_map`, `values_unverified`, `base_proxy`, `G0_kPa`, `E_over_G`
+
+### `figures_wiki/effect_curves.png` (234 kB)
+
+
+### `figures_wiki/effect_curves.svg` (56 kB)
+
+
+### `figures_wiki/importance_comparison.png` (122 kB)
+
+
+### `figures_wiki/importance_comparison.svg` (13 kB)
+
+
+### `figures_wiki/knobs_fold_change.png` (123 kB)
+
+
+### `figures_wiki/knobs_fold_change.svg` (14 kB)
+
+
+### `figures_wiki/noise_check_anchors.png` (180 kB)
+
+
+### `figures_wiki/noise_check_anchors.svg` (31 kB)
+
+
+### `figures_wiki/predicted_vs_heldout.png` (172 kB)
+
+
+### `figures_wiki/predicted_vs_heldout.svg` (51 kB)
+
+
+### `figures_wiki/qc_timeseries_sample_inter_free_12A.png` (530 kB)
+
+
+### `figures_wiki/qc_timeseries_sample_inter_free_12A.svg` (361 kB)
+
+
+### `figures_wiki/reactive_bridge_fraction.png` (176 kB)
+
+
+### `figures_wiki/reactive_bridge_fraction.svg` (18 kB)
+
+
+### `figures_wiki/residual_diagnostics.png` (190 kB)
+
+
+### `figures_wiki/residual_diagnostics.svg` (144 kB)
+
+
+### `figures_wiki/response_surface_2x2.png` (498 kB)
+
+
+### `figures_wiki/response_surface_2x2.svg` (336 kB)
+
+
+### `figures_wiki/response_surface_base.png` (319 kB)
+
+
+### `figures_wiki/response_surface_base.svg` (133 kB)
+
+
+### `figures_wiki/scripts/10_wiki_figures.py` (30 kB)
+
+
+### `figures_wiki/scripts/style.py` (4 kB)
+
+
+### `figures_wiki.zip` (3310 kB)
+
 
 ### `models/comparison.csv` (2 kB)
 
@@ -209,7 +358,7 @@ Per-parameter F-test (all terms containing the parameter dropped) and LMG shares
 
 Columns: `parameter`, `terms_dropped`, `F`, `df_num`, `df_den`, `p`, `unique_dR2`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `models/inter_linear/run_diagnostics.csv` (27 kB)
+### `models/inter_linear/run_diagnostics.csv` (32 kB)
 
 Per run: observed, fitted (link scale), residual, studentised residual, leverage, Cook's D, held-out prediction.
 
@@ -251,7 +400,7 @@ Per-parameter F-test (all terms containing the parameter dropped) and LMG shares
 
 Columns: `parameter`, `terms_dropped`, `F`, `df_num`, `df_den`, `p`, `unique_dR2`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `models/inter_log/run_diagnostics.csv` (27 kB)
+### `models/inter_log/run_diagnostics.csv` (32 kB)
 
 Per run: observed, fitted (link scale), residual, studentised residual, leverage, Cook's D, held-out prediction.
 
@@ -287,7 +436,7 @@ Per-parameter F-test (all terms containing the parameter dropped) and LMG shares
 
 Columns: `parameter`, `terms_dropped`, `F`, `df_num`, `df_den`, `p`, `unique_dR2`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `models/interfrac_linear/run_diagnostics.csv` (28 kB)
+### `models/interfrac_linear/run_diagnostics.csv` (32 kB)
 
 Per run: observed, fitted (link scale), residual, studentised residual, leverage, Cook's D, held-out prediction.
 
@@ -323,7 +472,7 @@ Per-parameter F-test (all terms containing the parameter dropped) and LMG shares
 
 Columns: `parameter`, `terms_dropped`, `F`, `df_num`, `df_den`, `p`, `unique_dR2`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `models/interfrac_log/run_diagnostics.csv` (28 kB)
+### `models/interfrac_log/run_diagnostics.csv` (32 kB)
 
 Per run: observed, fitted (link scale), residual, studentised residual, leverage, Cook's D, held-out prediction.
 
@@ -359,7 +508,7 @@ Per-parameter F-test (all terms containing the parameter dropped) and LMG shares
 
 Columns: `parameter`, `terms_dropped`, `F`, `df_num`, `df_den`, `p`, `unique_dR2`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `models/intra_linear/run_diagnostics.csv` (27 kB)
+### `models/intra_linear/run_diagnostics.csv` (32 kB)
 
 Per run: observed, fitted (link scale), residual, studentised residual, leverage, Cook's D, held-out prediction.
 
@@ -395,7 +544,7 @@ Per-parameter F-test (all terms containing the parameter dropped) and LMG shares
 
 Columns: `parameter`, `terms_dropped`, `F`, `df_num`, `df_den`, `p`, `unique_dR2`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `models/intra_log/run_diagnostics.csv` (27 kB)
+### `models/intra_log/run_diagnostics.csv` (32 kB)
 
 Per run: observed, fitted (link scale), residual, studentised residual, leverage, Cook's D, held-out prediction.
 
@@ -407,13 +556,13 @@ Per-parameter F-tests and LMG shares for all six fits.
 
 Columns: `response`, `coding`, `parameter`, `F`, `p`, `lmg_share_R2`, `lmg_share_of_explained`
 
-### `per_lysine.csv` (429 kB)
+### `per_lysine.csv` (511 kB)
 
 Per lysine per run: chain, residue (0-based in chain), K index, pinned, mean free inter-chain partners at 12 Å.
 
 Columns: `slug`, `chain`, `residue_in_chain`, `pinned`, `mean_inter_partners_12A`, `k_index`
 
-### `qc/equilibration_per_run.csv` (35 kB)
+### `qc/equilibration_per_run.csv` (41 kB)
 
 Chodera burn-in per run and observable (frame index).
 
@@ -425,13 +574,13 @@ Titus's reactive anchors A10-A19: team-A contacts and crosslinks formed / loops 
 
 Columns: `Name`, `slug`, `batch`, `anchor_id`, `replicate`, `concentration`, `chain_length`, `spacing_repeats`, `spacing_pct`, `ionic_strength`, `lead_repeats`, `trail_repeats`, `Sequence`, `concentration_planned`, `concentration_rel_change`, `meta_n_residues`, `meta_box_x_nm`, `meta_box_z_nm`, `meta_box_headroom_nm`, `meta_walltime_used_fraction`, `crosslink_distance`, `crosslink_prob`, `inter_teamA_12A`, `intra_teamA_12A`, `inter_teamA_pairs_ever`, `xl_formed`, `xl_loops`, `xl_bridges`, `xl_max`, `xl_conversion`, `xl_bridge_frac`
 
-### `run_inventory.csv` (70 kB)
+### `run_inventory.csv` (83 kB)
 
 Every run-sheet row matched to its output, with status (finished / summary_only / excluded / missing) and the reason.
 
 Columns: `Name`, `slug`, `sheet`, `batch`, `anchor_id`, `replicate`, `chain_length`, `n_lys`, `spacing_repeats`, `spacing_pct`, `lead_repeats`, `trail_repeats`, `Sequence`, `concentration_planned`, `ionic_strength`, `steps`, `mode`, `preattached_fraction`, `walltime`, `crosslink_distance`, `crosslink_prob`, `meta_status`, `meta_n_residues`, `meta_n_frames_saved`, `meta_run_legs`, `meta_walltime_used_fraction`, `meta_box_x_nm`, `meta_box_z_nm`, `meta_z_max_nm`, `meta_box_headroom_nm`, `meta_box_tall_enough`, `meta_spacing_nm`, `meta_concentration_chains_per_nm2`, `meta_lattice_matches_box`, `meta_margin_nm`, `meta_ionic_strength_M`, `meta_lysines_total`, `meta_surface_bonds`, `meta_surface_bonds_run`, `meta_surface_chains_with_1`, `meta_surface_chains_with_2`, `meta_surface_chains_with_3plus`, `meta_crosslinking`, `meta_surface_seed`, `meta_total_time_ns`, `concentration`, `concentration_rel_change`, `status`, `reason`
 
-### `runs_metrics.csv` (103 kB)
+### `runs_metrics.csv` (120 kB)
 
 One row per run: design parameters, all per-run metrics with block SEs, QC flags. `data_source` = trajectory (104) or teammate_summary (20, team-definition-A columns only).
 
@@ -474,6 +623,10 @@ Copy of the analysis scripts that produced everything here.
 Copy of the analysis scripts that produced everything here.
 
 ### `scripts/09_export.py` (18 kB)
+
+Copy of the analysis scripts that produced everything here.
+
+### `scripts/10_wiki_figures.py` (30 kB)
 
 Copy of the analysis scripts that produced everything here.
 
@@ -563,7 +716,7 @@ Columns: `term`, `coef_logit`, `se`, `p`, `ci_low`, `ci_high`, `odds_ratio_per_u
 
 Reactive-anchor analysis in plain text.
 
-### `stats/run_diagnostics.csv` (29 kB)
+### `stats/run_diagnostics.csv` (34 kB)
 
 Frozen model, per run: fitted, residual, leverage, Cook's D, held-out predictions.
 
@@ -581,7 +734,7 @@ The frozen model on the sensitivity responses (8 / 16 Å, team definition A with
 
 Columns: `response`, `runs`, `n`, `R2`, `adj_R2`, `lmg_C`, `p_C`, `lmg_L`, `p_L`, `lmg_S`, `p_S`, `lmg_ion`, `p_ion`, `coef_C`, `coef_L`, `coef_S`, `coef_ion`
 
-### `stats/shap_values.npy` (3 kB)
+### `stats/shap_values.npy` (4 kB)
 
 SHAP values of the random forest (NumPy array, runs x parameters).
 
@@ -595,7 +748,7 @@ Titus's 20 runs predicted by the team-A model fitted on our runs alone (held out
 
 Columns: `slug`, `concentration`, `chain_length`, `spacing_pct`, `ionic_strength`, `y`, `pred_log`, `pi_low_log`, `pi_high_log`, `resid_log`, `outside_95pi`, `pred`
 
-### `timeseries_primary.csv.gz` (1679 kB)
+### `timeseries_primary.csv.gz` (1960 kB)
 
 Per-frame inter / intra free contacts at 12 Å for every trajectory run, all frames including burn-in.
 

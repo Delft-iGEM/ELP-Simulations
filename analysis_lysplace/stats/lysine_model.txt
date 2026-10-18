@@ -25,8 +25,7 @@ design_class
 clustered          3.06             3.67
 focused            7.00             6.09
 random            13.42            13.52
-scramble          18.55            18.78
-uniform           18.48            18.77
+uniform           18.51            18.77
 
 Design space: 211876 designs of 4 K on 49 positions; expected bridges per 16 chains 2.7-20.1; 99.5% of designs inside the data range of sep_nearest.
 Best design in every one of 200 parameter draws reaches 19.6-20.5 expected bridges (95 %).
@@ -71,13 +70,13 @@ min_sep_res
 
 Simulated designs: expected (model) vs observed bridges, best 10 observed:
               Name design_class  n_bridges     K_residues  expected_bridges  rank_in_design_space
-          5R1G13D3     scramble         21 48+123+263+313             18.04                 26410
+          5R1G13D3      uniform         21 48+123+263+313             18.04                 26410
 10R8G13D11_uniform      uniform         21 73+158+263+353             19.46                  3393
 11R10G5D11_uniform      uniform         21 78+168+223+353             18.86                 12082
    8R8G9D8_uniform      uniform         21 63+158+243+338             19.54                  2451
    9R9G6D2_uniform      uniform         21 68+163+228+308             18.93                 10964
  1R11G15D2_uniform      uniform         21 28+173+273+308             17.84                 30798
-           2R2G7D2     scramble         21 33+128+233+308             19.29                  5687
+           2R2G7D2      uniform         21 33+128+233+308             19.29                  5687
    3R1G8D2_uniform      uniform         21 38+123+238+308             18.98                 10260
-          6R7G10D5     scramble         21 53+153+248+323             19.37                  4568
-        11R10G2D11     scramble         21 78+168+208+353             18.10                 25331
+          6R7G10D5      uniform         21 53+153+248+323             19.37                  4568
+        11R10G2D11      uniform         21 78+168+208+353             18.10                 25331

@@ -12,6 +12,15 @@ the proxy; ionic strength has a small positive effect. **The lack-of-fit test is
 so the quadratic is not the final model: it misses the low-density corner and puts a spurious
 maximum near the top of the density range. Treat every number below as preliminary.
 
+**Update 2026-10-17 — non-reactive A10–A15 reruns.** The `-nr` reruns of Titus's anchors have
+finished for **A10–A15 (18 runs)**; they pass the same QC and enter the primary free-only
+analysis, so it now has **122 runs, 90 design points, 16 anchors** (pure-error df 20 → 32).
+A16–A19 (12 runs) are still running or queued and stay `incomplete` in the inventory; rerun
+`analysis/scripts/run_all.sh` once they finish. The new §7d has the numbers. Everything in §5–§7
+below was written for 104 runs; the figures, `stats/` and `export/` were regenerated for 122,
+so the headline numbers moved slightly (R² 0.960 → 0.959, grouped-CV R² 0.882 → 0.890; lack of
+fit still significant, F 6.6 → 4.9). Ranking and signs of the parameters are unchanged.
+
 **Update 2026-10-16 — Titus's runs.** His folders arrived with the merge of `origin/main`
 (`6725a2d`). They hold his notebook's per-run summaries, not trajectories, so his 20
 non-reactive `sub4-extra` runs enter only the **team-definition-A** fit (124 runs; §7a). The
@@ -44,10 +53,12 @@ Run sheets submitted from this checkout: `Chr_sub4_RUN_1.csv` (anchors BASE + A0
 | batch | finished & analysed | summary only (team def. A) | excluded |
 |---|---|---|---|
 | anchor BASE, A01–A09 (×3) | 30 | | |
-| anchor A10–A19 (×3, Titus) | | | **30** |
+| anchor A10–A19 (×3, Titus), reactive | | | **30** |
+| anchor A10–A15 `-nr` rerun (×3) | **18** | | |
+| anchor A16–A19 `-nr` rerun (×3) | not finished (12) | | |
 | extra (Titus) | | 20 | |
 | extra2 / extra3 / extra4 / extra5 | 20 / 10 / 30 / 14 | | |
-| **total** | **104** | 20 | 30 |
+| **total** | **122** | 20 | 30 |
 
 Not in any sheet available here: the 100 `sub4-main-*` rows of `submodule4_full_design_160.csv`
 and `sub4-extra5` rows 15–20. The superseded `batch1/batch2/milliQ/PBS` sheets have no runs on
@@ -56,8 +67,8 @@ disk.
 **Excluded — anchors A10–A19:** run with reactive K–K crosslinking on (0.8 nm, prob 1.0, 2:30
 walltime), against the protocol. Formed bonds hold lysine pairs together, so the contact count
 is inflated (Titus's summary, same 12 Å cutoff and team pair definition: ~8 inter-chain
-contacts/frame at C = 0.014, against ≤ 0.18 in our non-reactive runs below C = 0.018). A non-reactive rerun sheet is ready, not submitted:
-`rerun_A10-A19_nonreactive_30.csv` (crosslink columns blank, names `...-nr-repN`, walltime
+contacts/frame at C = 0.014, against ≤ 0.18 in our non-reactive runs below C = 0.018). The non-reactive rerun sheet
+`rerun_A10-A19_nonreactive_30.csv` has been submitted (A10–A15 done, A16–A19 pending; see §7d) (crosslink columns blank, names `...-nr-repN`, walltime
 1:45 for L ≥ 130 because L150 used 94 % of 1:30).
 
 **Summary only — `sub4-extra` (20 runs):** non-reactive, same template as ours (`prepare.py`
@@ -70,8 +81,8 @@ recovered from it. Checks possible from the summaries: 5714 frames, cutoff and w
 per chain, concentration within 0.02 % of planned (from the box), observed headroom ≥ 7.4 nm.
 Not possible: equilibration, drift, block SE.
 
-With the 104 runs: 84 distinct design points, 10 of them in triplicate (pure-error df = 20).
-The team-A fit adds 20 more points (104 distinct; pure error unchanged).
+With the 122 runs: 90 distinct design points, 16 of them in triplicate (pure-error df = 32).
+The team-A fit adds 20 more points (110 distinct; pure error unchanged).
 
 ## 3. Frozen definitions — `settings.yaml`
 
@@ -164,8 +175,9 @@ Pipeline facts read from the code, not assumed:
 
 ## 6. Noise check (step 4) — `figures/noise_check_anchors`
 
-Replicate CV across the 10 anchors: 0.9–11.6 % (pooled SD of log y = 0.067, i.e. ~7 %). The
-replicate SD rises with the mean (Spearman +0.44) while the CV does not (−0.33): the noise is
+Replicate CV across the 16 anchors (10 original + A10–A15 reruns): 0.9–21 % (pooled SD of
+log y = 0.078, i.e. ~8 %). A10 (C = 0.014, the lowest-density rerun) is the noisy one at 21 %; the
+other five reruns are at 2–6 %. The replicate SD rises with the mean (Spearman +0.35, n.s.) while the CV does not (−0.34, n.s.): the noise is
 multiplicative, so **the log transform is appropriate**. No run has a zero mean (range
 0.040–1.36), so log y needs no offset.
 
@@ -176,7 +188,7 @@ variability, so use the replicate pure error, never the per-run SE, as the noise
 ## 7. First-pass statistics (step 5) — `stats/`
 
 Model: OLS on log(`inter_free_12A`), four parameters coded to [−1, +1] over the protocol
-ranges, full quadratic (14 terms + intercept), n = 104.
+ranges, full quadratic (14 terms + intercept), n = 122 (104 before the A10–A15 reruns).
 
 * **Fit:** R² 0.960, adjusted R² 0.954; 5-fold grouped CV (replicates kept together) R² 0.882,
   RMSE 0.247 in log units (~28 %). Random forest: CV R² 0.871. The quadratic generalises as well
@@ -292,9 +304,41 @@ Titus's table. His crosslink event files are on his scratch, so the counts could
   re-derived here, model predictions rather than paired non-reactive runs, and bridge fraction
   is not stiffness either. The non-reactive A10–A19 reruns would give a paired comparison.
 
+### 7d. Non-reactive A10–A15 reruns (added 2026-10-17) — `-nr` runs, `stats/`, `export/models/`
+
+18 runs, 6 anchors × 3, same design points as Titus's reactive A10–A15 but crosslinking off, so
+they are proper replicates for the primary analysis.
+
+* **Out-of-sample check.** The quadratic fitted on the earlier 104 runs predicts the 6 new anchor
+  means with R² 0.90, RMSE 0.16 log units (below the 0.25 grouped-CV RMSE), mean residual +0.08;
+  17/18 runs lie inside the 95 % prediction interval. Per anchor, observed / predicted:
+  A10 1.33, A11 1.08, A12 0.98, A13 1.17, A14 1.05, A15 0.95. A10, at C = 0.014 in the
+  low-density corner, is again the worst, and is under-predicted, the opposite direction to
+  the over-prediction at the narrow-spacing corner (`extra2-05`, `extra-04`).
+* **Refit on 122 runs:** R² 0.959, adj. 0.953, grouped-CV R² 0.890 (RMSE 0.23), RF CV R² 0.862.
+  Variance shares: C 83 %, L 6 %, S 5 %, I 6 % (as before). Lack of fit F(75, 32) = 4.9,
+  p = 2e−6 (was F 6.6 with df_pe = 20); sd of pure error 0.078 vs residual sd 0.151. The
+  quadratic is still not adequate. Log-coded C: R² 0.981, CV 0.936, LOF F 2.1, p = 0.011.
+* **Paired reactive vs non-reactive, now measured instead of predicted.** Team-A inter-chain
+  contacts per frame, reactive / non-reactive, are ×38–91 across A10–A15 (reactive 7.5–20 per
+  frame, non-reactive 0.12–0.49). This confirms the exclusion
+  from the contact fits.
+* **Proxy check on the 6 paired points.** The reactive bridge fraction against the *measured*
+  non-reactive quantity: contacts Spearman 0.83 (p = 0.04), bridge share inter / (inter + intra)
+  Spearman 0.83, Pearson **0.97** (p = 0.001). With six points that is suggestive only. The
+  bridge share matches in absolute value (A12 0.79 vs 0.79, A15 0.92 vs 0.92, A10 0.45 vs 0.39),
+  while the contact count is rank-consistent over these six points. §7b found weak rank agreement for
+  the contact count over all 10 anchors, using model predictions; whether that persists with
+  measured values has to wait for A16–A19.
+* **QC:** 18/18 completed, 5714 frames, one leg. No drift flag at |z| > 3 (max |z| 2.6, A12-rep1);
+  4 runs have a late Rg/height burn-in detection (flagged, kept). One run, A10-rep2, has Cook's D
+  above 4/n (studentised residual +2.6, observed 0.140 vs 0.106 / 0.094 for its siblings).
+
 ### 7c. Log-coded refit and two extra responses (added 2026-10-16) — `export/models/`, `scripts/07_models.py`
 
-**Not frozen: the log coding was chosen after the frozen model's lack of fit was seen.** The frozen
+**Not frozen: the log coding was chosen after the frozen model's lack of fit was seen.** *The table
+below is the 104-run version; the 122-run values are in `export/models/comparison.csv` (inter:
+linear R² 0.959, CV 0.890, LOF F 4.9; log R² 0.981, CV 0.936, LOF F 2.1, p = 0.011).* The frozen
 linear-coded model stays the baseline. Same full quadratic, n = 104, with the natural log of each
 parameter coded to −1…+1 over its log range:
 
@@ -338,9 +382,10 @@ them as a pair without a second cue.
 
 1. **Data:** where are the 100 `sub4-main-*` runs (and extra5 15–20)? Were they ever submitted?
    Without them the design has 84 points, not 220.
-2. **A10–A19:** submit `rerun_A10-A19_nonreactive_30.csv` (add it to `used-runs.csv` via the
-   notebook as usual)? That would bring pure error to 20 anchors / 40 df as planned. It would also
-   pair each reactive anchor with a non-reactive run at the same point for the proxy check (§7b).
+2. **A16–A19 reruns:** A10–A15 are in (§7d); A16–A19 (12 runs) are not finished. When they are,
+   rerun `analysis/scripts/run_all.sh` and update §7d (pure error then reaches 20 anchors / 40 df
+   as planned, and the proxy check covers all 10 paired points). Add the rerun sheet to
+   `used-runs.csv` via the notebook as usual.
 3. **Titus's 20 `sub4-extra` runs:** now in the team-A fit from his summaries (§7a). To put them in
    the primary (free-only) analysis and QC them, he still needs to share the run folders or run
    step 2a and send the `.npz` files.
@@ -358,6 +403,14 @@ them as a pair without a second cue.
    middle), and the lead/trail split is tied to spacing (r = −0.91). Spacing effects therefore
    include a small shift of the block toward the N-terminus. The lysine-arrangement submodule
    found placement matters a lot, so state this when generalising.
+
+**Known issue (found 2026-10-16):** `01_extract_timeseries.py` looked residue masses up by three-letter
+code, and placeholder rows in `residues_CALVADOS2.csv` (Z = VAL, X = LYS, MW −2) overwrote valine and
+lysine. The mass-weighted heights (`h50_nm`, `h95_nm`, `zmean_nm`) and `rg_nm` in the current
+`.npz` files carry this error. Recomputed on three runs it moves them by ≤ 0.05 nm (≤ 0.4 %), so no
+conclusion changes. Contacts, Ree and everything in the primary analysis are unaffected. The script is
+fixed; regenerate with `01_extract_timeseries.py --overwrite` at the next full rerun, so old and new
+runs are consistent.
 
 ## 10. Reproduce
 

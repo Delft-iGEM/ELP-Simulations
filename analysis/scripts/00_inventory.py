@@ -39,7 +39,7 @@ for _, r in rows.iterrows():
         meta = pd.read_csv(meta_path, index_col="key")["value"].reindex(META_KEYS)
         rec.update({f"meta_{k}": v for k, v in meta.items()})
         dcd = SIMS / r["slug"] / "runtime" / f"{r['slug']}.dcd"
-        frames = int(float(meta["n_frames_saved"]))
+        frames = 0 if pd.isna(meta["n_frames_saved"]) else int(float(meta["n_frames_saved"]))   # empty while a run is unfinished
         conc = float(meta["concentration_chains_per_nm2"])
         rec["concentration"] = conc
         rec["concentration_rel_change"] = conc / r["concentration"] - 1
@@ -50,11 +50,11 @@ for _, r in rows.iterrows():
             problems.append(f"status {meta['status']}")
         if frames < EXPECTED_FRAMES:
             problems.append(f"{frames}/{EXPECTED_FRAMES} frames")
-        if float(meta["run_legs"]) > 1:
+        if pd.notna(meta["run_legs"]) and float(meta["run_legs"]) > 1:
             problems.append(f"{meta['run_legs']} legs (resumed after walltime)")
-        if str(meta["box_tall_enough"]) != "True":
+        if meta["status"] == "completed" and str(meta["box_tall_enough"]) != "True":
             problems.append("box not tall enough")
-        if str(meta["lattice_matches_box"]) != "True" or float(meta["margin_nm"]) != 0:
+        if meta["status"] == "completed" and (str(meta["lattice_matches_box"]) != "True" or float(meta["margin_nm"]) != 0):
             problems.append("plan_box changed the lattice/box")
         if abs(rec["concentration_rel_change"]) > 0.01:
             problems.append("concentration changed by >1% at planning")

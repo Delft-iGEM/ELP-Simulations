@@ -18,6 +18,18 @@ INK, MUTED, GRID = "#1d1d1f", "#6e6e73", "#e6e6e6"
 # Sequential scale for the response surface: white -> yellow -> orange (one warm family).
 SURFACE_SCALE = [[0.0, "#FFF6DD"], [0.45, YELLOW], [1.0, ORANGE]]
 FONT = "Poppins, Arial, sans-serif"
+CLEAR = "rgba(0,0,0,0)"
+BG = None                       # None: template default (white); wiki_mode() makes both backgrounds transparent
+EDGE = "white"                  # outline of markers; wiki_mode() makes it transparent
+
+
+def wiki_mode():
+    """Transparent figures that read on white and on near-black (#1a1a1a): mid-grey text,
+    axes and grid (about 4.2:1 on both), no white outlines. Data colours stay the team palette."""
+    global INK, MUTED, GRID, BG, EDGE
+    INK = MUTED = "#7c8089"
+    GRID = "rgba(128,128,128,0.28)"
+    BG, EDGE = CLEAR, CLEAR
 
 
 def layout(fig, title=None, width=900, height=560):
@@ -28,8 +40,12 @@ def layout(fig, title=None, width=900, height=560):
         width=width, height=height, margin=dict(l=70, r=30, t=60 if title else 30, b=60),
         legend=dict(bgcolor="rgba(0,0,0,0)"), hoverlabel=dict(font_family=FONT),
     )
-    fig.update_xaxes(showgrid=True, gridcolor=GRID, linecolor=MUTED, ticks="outside", tickcolor=MUTED)
-    fig.update_yaxes(showgrid=True, gridcolor=GRID, linecolor=MUTED, ticks="outside", tickcolor=MUTED)
+    if BG:
+        fig.update_layout(paper_bgcolor=BG, plot_bgcolor=BG, title_font_color=INK)
+    fig.update_xaxes(showgrid=True, gridcolor=GRID, linecolor=MUTED, ticks="outside", tickcolor=MUTED,
+                     zerolinecolor=GRID)
+    fig.update_yaxes(showgrid=True, gridcolor=GRID, linecolor=MUTED, ticks="outside", tickcolor=MUTED,
+                     zerolinecolor=GRID)
     return fig
 
 
@@ -61,7 +77,7 @@ def small_multiples(slugs, get, t0_by_slug, title, ytitle, ncols=4, ns_per_frame
         r, c = i // ncols + 1, i % ncols + 1
         y = get(s)
         t = np.arange(len(y)) * ns_per_frame
-        fig.add_trace(go.Scattergl(x=t, y=y, mode="lines", line=dict(color="#c9d8ff", width=1),
+        fig.add_trace(go.Scattergl(x=t, y=y, mode="lines", line=dict(color="#c9d8ff" if BG is None else "rgba(31,107,255,0.30)", width=1),
                                    name="per frame", showlegend=i == 0,
                                    hovertemplate="%{x:.0f} ns: %{y:.2f}<extra></extra>"), r, c)
         fig.add_trace(go.Scattergl(x=t, y=running_mean(y), mode="lines", line=dict(color=BLUE, width=2),

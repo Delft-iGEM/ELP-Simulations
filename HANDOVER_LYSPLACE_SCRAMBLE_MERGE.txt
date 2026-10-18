@@ -1,0 +1,161 @@
+HANDOVER: RGD+ lysine-placement module — "scramble" merged into "uniform", figures regenerated
+Written 2026-10-17. Repository: /home/cjbrunings/ELP-Simulations. Nothing committed to git yet.
+
+Your job (next Claude): bring every piece of prose that still describes FIVE classes / a separate "scramble"
+class into line with the analysis below. The analysis itself (scripts, stats/, figures/, analysis_lysplace/README.md,
+settings.yaml) is ALREADY updated — do not rerun or re-edit it. The main text to fix is WIKI_LYSPLACE.txt (section C
+gives every edit with line numbers), plus any wiki page built from it.
+
+======================================================================================
+A. WHAT CHANGED AND WHY
+======================================================================================
+1. "Scramble" is not a design class. Chris (2026-10-17): the sheet Chr_RGD+_lysine_scramble_sweep_20.csv uses exactly
+   the uniform rule (one K per block, positions scrambled within the blocks); it was only labelled differently because
+   its run names have no "_uniform" suffix. Its 20 runs are now counted as UNIFORM.
+   -> 4 classes: clustered 17, focused 25, random 43, uniform 45 (= 25 "_uniform" runs + 20 from the scramble sheet).
+   -> Kruskal-Wallis over 4 classes; Mann-Whitney + Holm over 6 pairs (was 10).
+   Never write "scramble" as a class again. If the history matters: "an earlier version treated a 20-run batch of
+   uniform designs as a separate 'scramble' class; it was indistinguishable from uniform on all 23 responses
+   (all Holm p > 0.6) and is now pooled."
+
+2. Figures regenerated (analysis_lysplace/figures/*.png + .html):
+   - transparent background (PNG alpha), mid-grey text/axes/grid (#7c8089) so they read on white AND on near-black
+     (#1a1a1a) — same "wiki mode" as the SubM4 wiki figures;
+   - NO figure titles. Put the title in the wiki caption (suggested captions in section E);
+   - 4 classes, colour ramp light -> dark = clustered #7C9CF5, focused #4F7FF5, random #2A5BE0, uniform #1F48B8, each
+     with its own marker (circle, square, triangle, diamond). The darkest step of the old ramp was invisible on dark
+     backgrounds, so the ramp was lightened; marker shape is the second cue.
+   - z_profiles keeps the class names above its four panels (they label the panels; they are not a figure title).
+   Files: class_comparison, z_profiles, lysine_bridge_probability, lysine_model_check, design_rule, bridge_timecourse.
+
+3. Code changes (already done): analysis_lysplace/scripts/common.py (CLASSES = 4; no-suffix sheet -> "uniform"),
+   03_compare.py (removed the uniform-vs-scramble block from summary.txt), 05_figures.py (wiki mode, no titles, ramp).
+   settings.yaml: dated note 2026-10-17 appended (frozen entries untouched). analysis_lysplace/README.md: updated.
+
+4. What did NOT change (identical files before/after): the per-lysine GEE (lysine_gee_bridge.csv, lysine_gee_loop.csv),
+   the design search (design_top.csv, design_rule.csv), the descriptor GLM coefficients. These never used the class
+   label. All of section 6 and 7 numbers in WIKI_LYSPLACE.txt stay, except the class-mean line and the "SD 2-3" line.
+
+======================================================================================
+B. NEW NUMBERS (source: analysis_lysplace/stats/; old values in brackets where they changed)
+======================================================================================
+Class medians (n = 17 / 25 / 43 / 45)            clustered focused random uniform   Kruskal-Wallis p
+  bridges (PRIMARY)                                  3        7      14      19       2.3e-21  [1e-20; uniform 19, scramble 19.5]
+  loops                                             16       14       8       3
+  crosslinks formed (of 22)                         19       21      22      22
+  distinct chain pairs bridged                       3        7      13      18
+  largest connected cluster / 16                  0.13     0.19    0.69    0.94
+  % runs with all 16 chains connected                0        0      14      47       [uniform 48, scramble 45]  (21 of 45)
+  cycle rank                                         0        0       2       5
+  bridge height above wall (nm)                    1.5      2.2     6.1     7.2       [scramble 7.3]
+  fraction of bridges above h50                   0.00     0.00    0.55    0.70
+  brush h95 (nm)                                  14.2     13.3    13.5    12.7       1.6e-4  [5e-4; uniform 12.6]
+  brush h50 (nm)                                  5.73     5.41    5.49    5.58       0.064   [0.12]
+  RGD height (nm)                                  6.7      6.4     6.4     6.2       0.024   [0.05]   <-- see note B2
+  RGD fraction above h50                          0.54     0.46    0.51    0.50       0.15    [0.24]
+  Rg (nm)                                         5.75     5.56    5.44    5.25       5.5e-9  [scramble 5.26]
+  t50 of bridges (ns)                             16.7     4.0     5.3     4.8        6e-4
+Uniform (n = 45): bridges mean 18.5, SD 2.5, range 11-21, median 19 [95 % CI 18, 20], IQR 3.
+
+Bridges pairwise (Mann-Whitney, Holm over 6 pairs; Cliff's delta [95 % bootstrap CI]):
+  clustered-focused  p = 1.3e-5   delta -0.80 [-0.96, -0.58]
+  clustered-random   p = 6.6e-9   delta -1.00 [-1.00, -0.99]
+  clustered-uniform  p = 5.2e-9   delta -1.00 [-1.00, -1.00]
+  focused-random     p = 1.8e-8   delta -0.84 [-0.94, -0.70]
+  focused-uniform    p = 2.9e-11  delta -1.00 [-1.00, -0.99]
+  random-uniform     p = 4.7e-9   delta -0.75 [-0.88, -0.60]
+  -> "every pair of classes differs (Holm p < 1e-4; Cliff's delta -0.75 to -1.0)" is still true, now with no exception.
+
+B2. RGD — wording must change slightly. With uniform at n = 45 the RGD-height Kruskal-Wallis crosses 0.05 (p = 0.024).
+    Pairwise, only clustered vs uniform survives Holm (6.75 vs 6.19 nm, p = 0.016, delta 0.50); every other pair
+    Holm p >= 0.07. The exposure proxy (fraction of RGD above h50) is NOT different (p = 0.15; all pairs Holm p > 0.5).
+    Correct statement: "RGD exposure (fraction above the brush midline) does not depend on placement. Absolute RGD height
+    is ~0.5 nm lower in uniform than in clustered designs, in step with the slightly lower brush; no other pair differs."
+    Do NOT keep "costs nothing in RGD presentation" without that qualifier; "costs essentially nothing" is fine.
+
+B3. Brush height — pre-existing overstatement, fix it while you are there. WIKI section 0 says placement does "not [change]
+    the brush height". h50 is not significant (p = 0.06), but h95 is (p = 1.6e-4): uniform 12.7 nm is lower than
+    clustered 14.2 (Holm p = 0.001) and random 13.5 (Holm p = 0.003). Say "barely changes brush height (h95 within
+    1.6 nm)".
+
+Optimality rule (stats/optimal.txt): connectivity gate (>= 90 % of runs connected) met by NO class; best is uniform at
+47 % (was "48 %"). Top on primary + tie-breaks: uniform (median 19, IQR 3). Pooled one-per-block runs (45 uniform + 3
+random designs that happen to have one K per block) = 48 runs, median 19, 48 % connected (unchanged number, new wording).
+
+Descriptor GLM: coefficients unchanged (log min spacing OR 1.9 per e-fold, p < 1e-6; blocks with K OR 1.5; centroid n.s.;
+pseudo-R2 0.76; CV R2 0.80; random-only number of blocks p = 0.68). Changed: class label beyond the descriptors
+F(3, 123) = 15.2, p = 1.8e-8  [was F(4,122) = 11.3, p = 7.8e-8, written "p = 8e-8"].
+
+Per-lysine model check (stats/lysine_model.txt): R2 0.88, RMSE 2.15 unchanged. Class means obs vs CV-predicted:
+clustered 3.06 vs 3.67; focused 7.00 vs 6.09; random 13.42 vs 13.52; uniform 18.51 vs 18.77
+[was uniform 18.48 vs 18.77 and scramble 18.55 vs 18.78].
+
+======================================================================================
+C. EDITS TO WIKI_LYSPLACE.txt (line numbers as of 2026-10-17)
+======================================================================================
+L13      "clustered 3, focused 7, random 14, uniform 19, scramble 19.5."  -> "clustered 3, focused 7, random 14, uniform 19."
+L17      "...but not the brush height or how exposed the RGD is." -> "...but barely changes brush height and does not change
+         how exposed the RGD is."  (see B3)
+L22      class list already has 4 classes — fine.
+L56      "five run sheets" — still five SHEETS (correct). Keep.
+L62      "no class suffix -> called "scramble" (one K per block)" -> "uniform (no class suffix; same one-K-per-block rule,
+         only labelled differently)"
+L63      "Totals per class: clustered 17, focused 25, random 43, uniform 25, scramble 20." ->
+         "Totals per class: clustered 17, focused 25, random 43, uniform 45 (25 + 20 from the scramble sheet)."
+L73      "The five classes" -> "The four classes"
+L78      delete the "scramble : ..." row.
+L100-101 "over the 5 classes ... over the 10 pairs" -> "over the 4 classes ... over the 6 pairs"
+L106-107 add: figures are transparent (wiki mode, mid-grey text), no titles; ramp light->dark clustered..uniform, marker
+         shapes as second cue.
+L111     "all 10 class pairs" -> "all 6 class pairs"
+L125     disclosure numbers were seen BEFORE the merge; keep them true to history:
+         "(uniform ~18.5 and the 20-run 'scramble' batch ~18.6, now both counted as uniform; random ~13.4, focused ~7.0,
+         clustered ~3.1)"
+L128-129 "(the optimality gate, and uniform = scramble)" -> "(the optimality gate; uniform = scramble, and from 2026-10-17
+         scramble merged into uniform)"
+L134-148 replace the whole table with the 4-column table in section B (n = 17 / 25 / 43 / 45; KW p bridges 2e-21,
+         h95 2e-4, RGD height 0.02).
+L151     "Random, uniform and scramble almost always..." -> "Random and uniform almost always..."
+L154-157 replace point 2 with: "Every pair of classes differs on bridges (Holm p < 1e-4, Cliff's delta -0.75 to -1.0;
+         random vs uniform -0.75 [-0.88, -0.60])."
+L161     "h50 5.4-5.7 nm (not significant), h95 within 1.6 nm." -> "h50 5.4-5.7 nm (p = 0.06), h95 within 1.6 nm
+         (uniform slightly lower than clustered and random)."
+L162-163 replace point 4 with the B2 statement; keep the "(Wiki: say 'no significant effect' ...)" advice for the
+         exposure fraction.
+L170     "(p = 8e-8)" -> "(p = 2e-8)"
+L178     "best is uniform at 48 %" -> "best is uniform at 47 %"
+L181-182 "uniform and scramble (one lysine per block) come first and are indistinguishable." ->
+         "uniform (one lysine per block) comes first."
+L205-206 class-mean line -> "...random 13.42 vs 13.52; uniform 18.51 vs 18.77)."
+L224     "(SD 2-3 within uniform and scramble)" -> "(SD 2.5 within uniform)"
+L262-267 add to figures entry: "transparent PNG, no titles (caption carries the title)".
+L289     "the five classes" -> "the four classes"
+Also update the "Written 2026-10-16" header line with "updated 2026-10-17: scramble merged into uniform".
+After editing:  grep -n -i "scramble\|five class\|10 pairs\|19.5\|48 %\|p = 0.05\|8e-8" WIKI_LYSPLACE.txt
+should only hit the deliberate history mentions (L62/L63/L125/L128 wording).
+
+======================================================================================
+D. ALREADY DONE — DO NOT REDO
+======================================================================================
+analysis_lysplace/README.md (all of the above applied), settings.yaml (dated note), scripts, stats/*, figures/*,
+runs_metrics.csv, run_inventory.csv, per_lysine.csv, per_bond.csv (design_class column now says uniform for the 20 runs).
+To regenerate anything: analysis_lysplace/scripts/run_all.sh from the repo root (~1 min; no re-extraction needed).
+
+======================================================================================
+E. CAPTIONS (the titles that were removed from the figures — use as caption titles)
+======================================================================================
+class_comparison           "Placement decides where crosslinks go." Six panels per class (clustered, focused, random,
+                           uniform; boxes = median/IQR, points = runs, n = 17/25/43/45): bridges, loops, distinct chain
+                           pairs bridged, largest connected cluster / 16, bridge height above the wall, fraction of
+                           bridges above h50.
+z_profiles                 "Where the network sits." Density vs height above the wall per class: all beads (grey fill),
+                           bridges (solid), loops (dashed), RGD motifs (dotted); dotted line = median h95.
+lysine_bridge_probability  "What decides whether a free lysine bridges or loops." P(bridge), P(loop) vs sequence distance to
+                           the nearest other lysine on the same chain; points = binned data with 95 % Wilson CIs, lines =
+                           GEE model (nearest K free, mid-chain).
+lysine_model_check         "Per-lysine model, held-out runs (10-fold CV)." Predicted (sum P(bridge)/2) vs observed bridges
+                           per run; R2 0.88, RMSE 2.2.
+design_rule                "Bridges rise with the closest lysine-lysine spacing and plateau." Model best (solid) and median
+                           (dashed) design at each minimum spacing, with all 130 simulated runs; dotted line = 22 (maximum).
+bridge_timecourse          "Bridges formed over time (median run per class)." Inter-chain crosslinks vs time after
+                           crosslinking starts (10 ns).

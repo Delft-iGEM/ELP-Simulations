@@ -88,3 +88,9 @@ seed: 20261016
 # outcome or use a gate grounded in a target (e.g. a percolation requirement), set before running.
 # 2026-10-16: uniform and scramble differ on no response (all Holm p > 0.6); they are reported
 # separately as designed and pooled as "one per block" where noted.
+# 2026-10-17: "scramble" is not a separate design class. Chris: the scramble sheet
+# (Chr_RGD+_lysine_scramble_sweep_20.csv) uses the same one-K-per-block rule as uniform and was only
+# labelled differently. From this date the 20 scramble runs are analysed as uniform (uniform n = 45);
+# data.classes above is superseded by [clustered, focused, random, uniform] (scripts/common.py
+# CLASSES), and the Kruskal-Wallis / Holm comparisons are over 4 classes and 6 pairs. Nothing else
+# changed: the per-lysine model and design search do not use the class label.

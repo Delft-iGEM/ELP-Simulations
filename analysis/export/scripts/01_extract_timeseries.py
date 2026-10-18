@@ -34,7 +34,12 @@ ZBIN_A = 2.0             # density-profile bin width (Angstrom)
 
 
 def _masses():
+    # Fixed 2026-10-16: the table has placeholder rows Z (resname VAL) and X (resname LYS) with
+    # MW -2, which a plain three-letter lookup let overwrite VAL and LYS. The .npz files written
+    # before this fix carry that error in h50/h95/zmean/Rg (<= 0.4 % on the runs checked); rerun
+    # this step with --overwrite to regenerate them.
     t = pd.read_csv(ROOT / "residues_CALVADOS2.csv")
+    t = t[~t["one"].isin(["Z", "X"])]
     return dict(zip(t["three"], t["MW"]))
 
 

@@ -29,11 +29,11 @@ SHEETS = [
     "Chr_RGD+_Lysine_sweep_20.csv",           # uniform / focused / random, 20
     "Chr_RGD+_Lysine_sweep_30.csv",           # clustered / uniform / focused / random, 30
     "Chr_RGD+_lysRandom.csv",                 # random, 20
-    "Chr_RGD+_lysine_scramble_sweep_20.csv",  # no class suffix; one K per block -> "scramble"
+    "Chr_RGD+_lysine_scramble_sweep_20.csv",  # no class suffix; one K per block = uniform (only labelled differently)
 ]
 DOMAIN = "LDASTVYAVTGRGDSPASSAASA"
 RGD = "RGD"
-CLASSES = ["clustered", "focused", "random", "uniform", "scramble"]   # fixed order in tables and figures
+CLASSES = ["clustered", "focused", "random", "uniform"]   # fixed order in tables and figures
 
 
 def slugify(name: str) -> str:
@@ -55,7 +55,7 @@ def read_sheets() -> pd.DataFrame:
     df["slug"] = df.Name.map(slugify)
     assert not df.slug.duplicated().any(), "a run name appears twice"
     m = df.Name.str.extract(r"_(uniform|focused|clustered|random)$", expand=False)
-    df["design_class"] = m.fillna("scramble")
+    df["design_class"] = m.fillna("uniform")   # the "scramble" sheet is the same design rule as uniform (2026-10-17)
     return df
 
 

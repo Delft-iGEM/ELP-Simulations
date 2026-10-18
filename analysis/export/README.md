@@ -1,6 +1,6 @@
 # SubM4 export for the write-up
 
-Generated 2026-10-16 08:05 by `analysis/scripts/09_export.py`, repository HEAD `6725a2d`. **The analysis scripts are not committed** (`analysis/` is untracked), so `MANIFEST.md` lists a SHA-256 for each script and `scripts/` holds a copy.
+Generated 2026-10-17 14:07 by `analysis/scripts/09_export.py`, repository HEAD `6539b98`. **The analysis scripts are not committed** (`analysis/` is untracked), so `MANIFEST.md` lists a SHA-256 for each script and `scripts/` holds a copy.
 
 ## What is here
 
@@ -12,20 +12,20 @@ Generated 2026-10-16 08:05 by `analysis/scripts/09_export.py`, repository HEAD `
 
 ## New: the log-coded model
 
-The full quadratic was refitted with the natural log of all four parameters, each coded to −1…+1 over its log range. On the primary response it raises R² from 0.960 to 0.984 and grouped-CV R² from 0.882 to 0.944, cuts the lack of fit from F = 6.61 to 2.51 (still significant, p = 0.012), and removes the spurious density maximum: the density effect is ×8.3 [7.2, 9.5] from 0.01 to 0.06 chains/nm², against ×5.4 in the frozen model, and it rises monotonically.
+The full quadratic was refitted with the natural log of all four parameters, each coded to −1…+1 over its log range. On the primary response it raises R² from 0.959 to 0.981 and grouped-CV R² from 0.890 to 0.936, cuts the lack of fit from F = 4.94 to 2.10 (still significant, p = 0.011), and removes the spurious density maximum: the density effect is ×8.8 [7.8, 9.9] from 0.01 to 0.06 chains/nm², against ×5.5 in the frozen model, and it rises monotonically.
 
 **The log coding was chosen after the lack of fit of the frozen model had been seen.** It is not part of the frozen analysis plan. The frozen linear-coded model stays the baseline, and any claim based on the log coding should say so.
 
-The most influential run under the log coding is `sub4-extra2-l58-s4-c0p01-i0p43-05` (Cook's D = 1.48, studentised residual -6.2), the low-density, narrow-spacing corner already flagged in the frozen fit; it passes QC and is kept.
+The most influential run under the log coding is `sub4-extra2-l58-s4-c0p01-i0p43-05` (Cook's D = 1.37, studentised residual -6.1), the low-density, narrow-spacing corner already flagged in the frozen fit; it passes QC and is kept.
 
 | response | coding | n | R² | adj. R² | CV R² | CV RMSE (link) | lack of fit F (df) | p |
 |---|---|---|---|---|---|---|---|---|
-| inter | linear | 104 | 0.960 | 0.954 | 0.882 | 0.247 | 6.61 (69, 20) | 1e-05 |
-| inter | log | 104 | 0.984 | 0.981 | 0.944 | 0.171 | 2.51 (69, 20) | 0.012 |
-| intra | linear | 104 | 0.986 | 0.984 | 0.976 | 0.127 | 2.14 (69, 20) | 0.029 |
-| intra | log | 104 | 0.989 | 0.988 | 0.982 | 0.111 | 1.61 (69, 20) | 0.12 |
-| interfrac | linear | 104 | 0.978 | 0.974 | 0.939 | 0.244 | 2.62 (69, 20) | 0.0092 |
-| interfrac | log | 104 | 0.988 | 0.987 | 0.962 | 0.192 | 1.23 (69, 20) | 0.31 |
+| inter | linear | 122 | 0.959 | 0.953 | 0.890 | 0.231 | 4.94 (75, 32) | 1.9e-06 |
+| inter | log | 122 | 0.981 | 0.978 | 0.936 | 0.176 | 2.10 (75, 32) | 0.011 |
+| intra | linear | 122 | 0.985 | 0.983 | 0.978 | 0.123 | 1.38 (75, 32) | 0.16 |
+| intra | log | 122 | 0.988 | 0.987 | 0.983 | 0.106 | 1.01 (75, 32) | 0.51 |
+| interfrac | linear | 122 | 0.977 | 0.973 | 0.934 | 0.258 | 2.55 (75, 32) | 0.0021 |
+| interfrac | log | 122 | 0.986 | 0.985 | 0.956 | 0.212 | 1.31 (75, 32) | 0.2 |
 
 R² for `interfrac` is the deviance pseudo-R²; its lack of fit is deviance-based and its residual tests use deviance (Shapiro–Wilk) and Pearson (Breusch–Pagan) residuals. The dispersion is estimated, so the autocorrelated frames are not treated as independent trials.
 
@@ -38,7 +38,7 @@ R² for `interfrac` is the deviance pseudo-R²; its lack of fit is deviance-base
 * **Random forest** importances in `figures_logcoded/importance_comparison` are the frozen ones, not a refit: trees split on order, so a monotone recoding of the inputs gives the same partitions.
 * **Video item 4:** no run has both the longest chain and the widest spacing; the choice rule and the two single-criterion runs are in `video_runs.md`.
 * **Zip:** every file is under 25 MB, nothing left out.
-* **Not yet included:** 60 prepared SubM4 runs that are in no sheet listed in `scripts/common.py` (e.g. the `sub4-main-*` runs of `Chr_sub4_run5.csv` and the `-nr` A10–A19 reruns). Add their sheets to `LOCAL_SHEETS` when they finish and rerun the commands below.
+* **Not yet included:** 30 prepared SubM4 runs that are in no sheet listed in `scripts/common.py` (e.g. the `sub4-main-*` runs of `Chr_sub4_run5.csv` and the `-nr` A10–A19 reruns). Add their sheets to `LOCAL_SHEETS` when they finish and rerun the commands below.
 
 ## Regenerate
 

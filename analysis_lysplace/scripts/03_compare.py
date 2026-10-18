@@ -184,15 +184,12 @@ def main():
     (STATS / "optimal.txt").write_text(otxt + "\n")
 
     med = summ.pivot(index="response", columns="class", values="median").reindex(list(RESPONSES))[CLASSES]
-    sc = pw[(pw.class_a == "uniform") & (pw.class_b == "scramble")].set_index("response")
     txt = ["RGD+ lysine placement - class comparison (n = 130; medians per class)", "",
            med.round(3).to_string(), "", "Kruskal-Wallis:", tests.set_index("response")[["kruskal_H", "p"]]
            .round(4).to_string(), "",
            f"Primary ({PRIMARY}) pairwise, Holm-adjusted:",
            pw[pw.response == PRIMARY][["class_a", "class_b", "median_a", "median_b", "p_holm", "cliffs_delta",
                                        "delta_ci_low", "delta_ci_high"]].round(4).to_string(index=False), "",
-           "uniform vs scramble (Holm p, Cliff's delta) per response:",
-           sc[["p_holm", "cliffs_delta"]].round(3).to_string(), "",
            "Descriptor GLM (quasi-binomial, n_bridges / 22):", *dtxt,
            dg.drop(columns=[c for c in ("F",) if c in dg]).round(4).to_string(index=False), "", otxt]
     (STATS / "summary.txt").write_text("\n".join(txt) + "\n")

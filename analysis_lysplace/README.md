@@ -4,11 +4,10 @@ Sub-submodule of the lysine work. Written 2026-10-16. Everything here is derived
 simulation output under `simulations/*/runtime` was only read.
 
 **In one paragraph.** 130 runs of the RGD+ construct (16 chains, 4 K each, crosslinking on, 400 ns)
-were compared across five lysine arrangements. Crosslinking saturates: 19–22 of the 22 possible bonds form in
+were compared across four lysine arrangements. Crosslinking saturates: 19–22 of the 22 possible bonds form in
 almost every run, so the *number* of crosslinks says little. What the arrangement decides is
-**where the bonds go**. Inter-chain bridges per run: clustered 3, focused 7, random 14, uniform 19,
-scramble 19.5 (medians). Every class differs from every other (Holm p < 1e-4), except uniform
-vs scramble, which match on every measure. One variable explains it: **the sequence distance
+**where the bonds go**. Inter-chain bridges per run: clustered 3, focused 7, random 14, uniform 19
+(medians). Every class differs from every other (Holm p < 1e-4). One variable explains it: **the sequence distance
 from a lysine to the nearest other lysine on its chain**. Close neighbours react with each other
 as loops; far-apart lysines bridge to other chains. Each e-fold increase in that distance raises the
 odds of a bridge 3.4-fold. Position along the chain does not matter. A per-lysine model built on
@@ -16,7 +15,7 @@ this predicts held-out runs with R² 0.88 and points to the optimum: spread the 
 evenly as the construct allows (minimum spacing ≈ 100 residues, about 20 of 22 bridges). Any design with
 minimum spacing ≥ 60 residues comes within ~1 bridge of that. Placement also sets **where the network
 sits**: one-block designs crosslink in a thin layer at the wall, while spread designs bridge mid-brush.
-It does not change brush height or RGD exposure.
+It barely changes brush height (h95 within 1.6 nm) and does not change RGD exposure (fraction above h50).
 
 ---
 
@@ -28,7 +27,11 @@ It does not change brush height or RGD exposure.
 | `Chr_RGD+_Lysine_sweep_20.csv` | 20 | 7 uniform, 7 focused, 6 random |
 | `Chr_RGD+_Lysine_sweep_30.csv` | 30 | 7 clustered, 8 uniform, 8 focused, 7 random |
 | `Chr_RGD+_lysRandom.csv` | 20 | random |
-| `Chr_RGD+_lysine_scramble_sweep_20.csv` | 20 | no suffix → "scramble" (one K per block) |
+| `Chr_RGD+_lysine_scramble_sweep_20.csv` | 20 | uniform (no class suffix; same one-K-per-block rule, only labelled differently) |
+
+Totals per class: clustered 17, focused 25, random 43, uniform 45 (25 with the `_uniform` suffix + 20
+from the "scramble" sheet). *Until 2026-10-17 the scramble sheet was analysed as a fifth class; see the
+dated note in `settings.yaml`.*
 
 All 130 runs passed QC: completed, 5714 frames, a single job, 19 of 64 lysines pinned at t = 0
 and none during the run, valence 1, box checks pass. Every run name matched the K positions in its simulated
@@ -42,7 +45,7 @@ from the spread within each class.
 | clustered | 4 K in one block, adjacent repeats | 5 |
 | focused | 4 K in one block, spread out | 5–15 |
 | random | 19 two-block, 19 three-block, 3 one-per-block, 2 one-block | 5–80 |
-| uniform / scramble | one K per block | 30–105 |
+| uniform | one K per block | 30–105 |
 
 Class and spacing are almost the same variable. Only the random class covers the whole range.
 
@@ -65,35 +68,38 @@ notes at the end of the file record what changed in interpretation afterwards.
 
 ## 3. Results — class comparison (`stats/summary.txt`, `figures/class_comparison`)
 
-Medians per class (n = 17 / 25 / 43 / 25 / 20):
+Medians per class (n = 17 / 25 / 43 / 45):
 
-| | clustered | focused | random | uniform | scramble | Kruskal–Wallis p |
-|---|---|---|---|---|---|---|
-| **bridges** | **3** | **7** | **14** | **19** | **19.5** | 1e−20 |
-| loops | 16 | 14 | 8 | 3 | 2.5 | |
-| crosslinks formed (of 22) | 19 | 21 | 22 | 22 | 22 | |
-| distinct chain pairs bridged | 3 | 7 | 13 | 18 | 18 | |
-| largest connected cluster / 16 | 0.13 | 0.19 | 0.69 | 0.94 | 0.94 | |
-| network connected (all 16 chains), % of runs | 0 | 0 | 14 | 48 | 45 | |
-| cycle rank | 0 | 0 | 2 | 5 | 5 | |
-| bridge height (nm) | 1.5 | 2.2 | 6.1 | 7.2 | 7.3 | |
-| bridges above h50 (fraction) | 0.00 | 0.00 | 0.55 | 0.70 | 0.70 | |
-| brush h95 (nm) | 14.2 | 13.3 | 13.5 | 12.6 | 12.7 | 5e−4 |
-| RGD height (nm) | 6.7 | 6.4 | 6.4 | 6.2 | 6.2 | 0.05 |
-| Rg (nm) | 5.75 | 5.56 | 5.44 | 5.25 | 5.26 | |
+| | clustered | focused | random | uniform | Kruskal–Wallis p |
+|---|---|---|---|---|---|
+| **bridges** | **3** | **7** | **14** | **19** | 2e−21 |
+| loops | 16 | 14 | 8 | 3 | |
+| crosslinks formed (of 22) | 19 | 21 | 22 | 22 | |
+| distinct chain pairs bridged | 3 | 7 | 13 | 18 | |
+| largest connected cluster / 16 | 0.13 | 0.19 | 0.69 | 0.94 | |
+| network connected (all 16 chains), % of runs | 0 | 0 | 14 | 47 | |
+| cycle rank | 0 | 0 | 2 | 5 | |
+| bridge height (nm) | 1.5 | 2.2 | 6.1 | 7.2 | |
+| bridges above h50 (fraction) | 0.00 | 0.00 | 0.55 | 0.70 | |
+| brush h95 (nm) | 14.2 | 13.3 | 13.5 | 12.7 | 2e−4 |
+| RGD height (nm) | 6.7 | 6.4 | 6.4 | 6.2 | 0.02 |
+| Rg (nm) | 5.75 | 5.56 | 5.44 | 5.25 | |
 
-* **Bridges:** every pair of classes differs (Holm p < 1e-4; Cliff's δ −0.75 to −1.0). The exception is uniform vs
-  scramble (p = 0.94, δ = 0.01 [−0.32, 0.35]). Uniform and scramble differ on none of the 23 responses
-  (all Holm p > 0.6), so the scramble sheet is effectively a second uniform set.
-* **Crosslinks formed** saturate in random / uniform / scramble. In clustered designs 7 lysines
+* **Bridges:** every pair of classes differs (Holm p ≤ 1.3e−5; Cliff's δ −0.75 to −1.0; random vs
+  uniform δ −0.75 [−0.88, −0.60]).
+* **Crosslinks formed** saturate in random and uniform. In clustered designs 7 lysines
   stay unreacted (median), because their partners on the same chain are used up or pinned.
 * **Where the network sits** (`figures/z_profiles`): in clustered and focused designs every crosslink,
   bridge or loop, lies within ~3 nm of the wall. The pinned lysine pulls its whole K block down,
   so all reactions happen in the surface layer (0 % of bridges above h50). In spread designs,
   bridges peak at 6–7 nm, above the mass peak, with ~70 % above h50. The brush itself barely
-  changes (h50 5.4–5.7 nm, n.s.; h95 within 1.6 nm).
-* **RGD exposure** is not affected by placement (height p = 0.05, fraction above h50 p = 0.24). Choosing a
-  placement for crosslinking costs nothing in RGD presentation.
+  changes (h50 5.4–5.7 nm, p = 0.06; h95 within 1.6 nm, but uniform is lower than clustered and
+  random, Holm p = 0.001 and 0.003).
+* **RGD exposure** is not affected by placement: the fraction of RGD above h50 does not differ
+  (p = 0.15, all pairs Holm p > 0.5). The absolute RGD height does differ slightly (p = 0.02), but only
+  clustered vs uniform survives Holm (6.75 vs 6.19 nm, p = 0.016), i.e. RGD sits ~0.5 nm lower,
+  in step with the slightly lower brush (h95) of uniform designs. Choosing a placement for
+  crosslinking costs essentially nothing in RGD presentation.
 * **Timing** (`figures/bridge_timecourse`): half of the bridges form within ~5 ns of crosslinking
   starting in every class except clustered (17 ns). The last bonds form up to ~390 ns later, so the
   network is still finishing at the end of some runs; event times are not kinetics.
@@ -101,17 +107,18 @@ Medians per class (n = 17 / 25 / 43 / 25 / 20):
   (OR 1.9 per e-fold, p < 1e-6) and the number of blocks carrying K (OR 1.5 per block) explain the
   runs with pseudo-R² 0.76 (CV R² 0.80); the K centroid does not matter. Within random, only spacing
   matters (number of blocks p = 0.68). The class label still adds information beyond these three
-  run-level descriptors (p = 8e−8). The per-lysine model (§4) resolves this: what counts is each lysine's
+  run-level descriptors (F(3, 123) = 15.2, p = 2e−8). The per-lysine model (§4) resolves this: what counts is each lysine's
   own nearest neighbour, not the chain's minimum.
 
 ### The optimality rule, applied (`stats/optimal.txt`)
 
 Step 2, connectivity in ≥ 90 % of runs, **is met by no class.** Even uniform joins all 16 chains in
-only 48 % of runs. With 4 lysines per chain, 19 of 64 pinned, a single fully connected network is
+only 47 % of runs (21 of 45). With 4 lysines per chain, 19 of 64 pinned, a single fully connected network is
 not reliable for any arrangement at this density. The rule is left as frozen and reported as
 failing; this is a finding in its own right. On the primary response and every tie-break,
-**uniform and scramble (one lysine per block) come first**, and they are statistically
-indistinguishable. Pooled, the 48 one-per-block runs give a median of 19 bridges, and 48 % are connected.
+**uniform (one lysine per block) comes first** (median 19 bridges, IQR 3). Adding the 3 random
+designs that also happen to have one K per block, the 48 one-per-block runs give a median of 19
+bridges, and 48 % are connected.
 
 ## 4. How to optimise placement — the per-lysine model (`stats/lysine_model.txt`)
 
@@ -140,7 +147,7 @@ beyond 100 ~90 %. A pinned neighbour helps because it cannot be a loop partner.
   The top designs (e.g. `1R5G10D11`, `1R3G8D11`, `2R4G9D10`; 20.06 [19.6, 20.5] expected bridges)
   all space the lysines ~100–105 residues apart. That is the most even spacing the 14-11-15-11 block layout
   allows, and inside the data range (one simulated design reaches 105). Their predicted advantage over
-  a good uniform design (~19.5) is about half a bridge, smaller than the run-to-run spread (SD 2–3 within uniform and scramble), so they are a
+  a good uniform design (~19.5) is about half a bridge, smaller than the run-to-run spread (SD 2.5 within uniform), so they are a
   plateau, not a single winner.
 * **Design rule:** maximise the smallest sequence distance between any two lysines on a chain;
   aim for ≥ 60 residues (within ~1 bridge of the optimum) and ideally even spacing (~100 residues for
@@ -172,7 +179,8 @@ beyond 100 ~90 %. A pinned neighbour helps because it cannot be a loop partner.
   `optimal.txt`, `lysine_gee_bridge.csv`, `lysine_gee_loop.csv`, `lysine_model_cv.csv`,
   `design_ranking.csv`, `design_top.csv`, `design_rule.csv`, `lysine_model.txt`
 * `figures/` — `class_comparison`, `z_profiles`, `lysine_bridge_probability`, `lysine_model_check`,
-  `design_rule`, `bridge_timecourse` (HTML with hover + PNG)
+  `design_rule`, `bridge_timecourse` (HTML with hover + PNG). Transparent background, mid-grey text
+  (reads on white and on near-black), no figure titles: the title goes in the caption
 
 ## 7. Reproduce
 
