@@ -1,0 +1,39 @@
+sub4-analysis.csv - one row per submodule 4 run. ';'-separated, decimal comma.
+Made by tools/sub4_analysis.py. Window: 100 ns to the end of the run.
+
+run, group                 run name; crosslinked / not_crosslinked (physical crosslinking on/off)
+family, design, replicate  from the name (anchor a10-a19 x rep1-3, extra, extra2, ...)
+lysine_spacing_S           pentads between lysines (the -s in the name)
+pentads_L                  the -l in the name
+residues_per_chain, lysines_per_chain, chains
+concentration_chains_nm2, preattached_fraction, ionic_strength_M, crosslink_distance_nm
+frames_total, first_frame, frames_analysed, window_ns
+lysines_surface_bonded     lysines pinned to the surface (all chains)
+pairs_intra, pairs_inter   K-K pairs monitored within one chain / between chains
+                           (same-chain pairs < 4 residues apart and pairs with both
+                           lysines surface-bonded are left out)
+pairs_dropped_both_bonded
+closest_intra_A, closest_inter_A   closest approach over the window, Angstrom
+
+per cutoff (suffix _10A and _12A), K-K bead distance below the cutoff = one hit:
+hits_per_frame_intra/inter average number of pairs in contact per frame
+p_pair_intra/inter         P(a given pair is in contact) = hits / (pairs x frames)
+inter_share_of_hits        share of all hits that are between different chains
+inter_share_sem            its 20-block SEM over frames
+pairs_ever_intra/inter     pairs that came within the cutoff at least once
+
+rg_nm, rg_sem_nm           radius of gyration per chain (unwrapped, beads unweighted),
+                           mean over chains and frames; SEM from 20 blocks
+lys_sasa_nm2               SASA per lysine bead (all lysines), every 10th frame
+lys_free_sasa_nm2          the same, only lysines not bonded to the surface
+chain_sasa_nm2             SASA of one whole chain, every 80th frame
+chain_sasa_per_residue_nm2 the same divided by residues_per_chain
+(each with a _sem_ column: 20-block SEM over frames)
+  SASA: coarse-grained Shrake-Rupley (bead radius sigma/2, probe 0.14 nm); every
+  bead of every chain can bury another, the grafting wall does not.
+
+xl_formed, xl_intra_loops, xl_inter_bridges, xl_bridge_fraction
+                           crosslinks formed during the run (crosslink_events.csv);
+                           0 for runs without crosslinking. In crosslinked runs a
+                           bonded lysine pair stays in contact afterwards, so it is
+                           also counted in the contact columns.

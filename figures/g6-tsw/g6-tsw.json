@@ -1,6 +1,9 @@
 {
   "runs_analysed": [
+    "g6-tsw-275k",
+    "g6-tsw-280k",
     "g6-orig-285k",
+    "g6-tsw-285k",
     "g6-tsw-290k",
     "g6-tsw-295k",
     "g6-tsw-300k",
@@ -14,7 +17,13 @@
     "g6-tsw-340k",
     "g6-tsw-345k",
     "g6-tsw-350k",
-    "g6-orig-370k"
+    "g6-tsw-355k",
+    "g6-tsw-360k",
+    "g6-tsw-365k",
+    "g6-orig-370k",
+    "g6-tsw-370k",
+    "g6-tsw-375k",
+    "g6-tsw-380k"
   ],
   "runs_missing": [],
   "n_residues": 357,

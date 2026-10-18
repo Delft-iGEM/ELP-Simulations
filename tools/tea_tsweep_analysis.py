@@ -87,13 +87,25 @@ def _axes(plt, height: float = 4.6, width: float = 7.4):
 
 
 def _finish(fig, plt, ax, title: str, caption: str, out: Path, extra=(),
-            line: bool = True) -> None:
-    handles = [plt.Line2D([], [], color=LINE, lw=2 if line else 0, marker="o", ms=6.5, mec=SURFACE,
-                          label="sweep, one seed"),
-               plt.Line2D([], [], ls="", marker="s", ms=6.5, mfc=SURFACE, mec=LINE, mew=1.6,
-                          label="g6-orig, other seed"), *extra]
+            line: bool = True, slide: bool = False) -> None:
+    """slide: transparent, no title, no caption, sweep only (no other-seed points)."""
+    if slide:
+        handles = [plt.Line2D([], [], color=LINE, lw=2 if line else 0, marker="o", ms=6.5,
+                              mec=SURFACE, label="RGD + sequence"),
+                   *extra]
+    else:
+        handles = [plt.Line2D([], [], color=LINE, lw=2 if line else 0, marker="o", ms=6.5,
+                              mec=SURFACE, label="sweep, one seed"),
+                   plt.Line2D([], [], ls="", marker="s", ms=6.5, mfc=SURFACE, mec=LINE, mew=1.6,
+                              label="g6-orig, other seed"), *extra]
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.14),
               ncol=len(handles), frameon=False, fontsize=8.5, labelcolor=INK)
+    if slide:
+        fig.tight_layout()
+        fig.savefig(out, dpi=200, transparent=True)
+        plt.close(fig)
+        print(f"wrote {out}")
+        return
     ax.set_title(title, loc="left", fontsize=10.5, color=INK, fontweight="bold")
     n_lines = caption.count("\n") + 1
     fig.text(0.01, 0.01, caption, fontsize=7.8, color=MUTED, ha="left", va="bottom",
@@ -105,7 +117,7 @@ def _finish(fig, plt, ax, title: str, caption: str, out: Path, extra=(),
     print(f"wrote {out}")
 
 
-def _series(ax, rows, key, sem=None):
+def _series(ax, rows, key, sem=None, ends: bool = True):
     sw = sorted((r for r in rows if r["kind"] == "sweep"), key=lambda r: r["T"])
     T = np.array([r["T"] for r in sw])
     y = np.array([r[key] for r in sw])
@@ -113,7 +125,7 @@ def _series(ax, rows, key, sem=None):
     e = np.array([r[sem] for r in sw]) if sem else None
     ax.errorbar(T, y, yerr=e, fmt="o", ms=6.5, color=LINE, elinewidth=1, capsize=0,
                 mec=SURFACE, mew=1.2, zorder=3)
-    for r in rows:
+    for r in rows if ends else ():
         if r["kind"] == "end":
             ax.errorbar(r["T"], r[key], yerr=r[sem] if sem else None, fmt="s", ms=6.5,
                         color=LINE, mfc=SURFACE, mew=1.6, elinewidth=1, capsize=0, zorder=3)
@@ -142,7 +154,7 @@ def plot(rows, events, summary, hist, m, out_dir: Path) -> None:
 
     # 1. Rg
     fig, ax = _axes(plt)
-    _series(ax, rows, "rg_nm", "rg_sem_nm")
+    _series(ax, rows, "rg_nm", "rg_sem_nm", ends=False)
     ax.axhline(theta, color=MUTED, lw=1, ls=(0, (1, 2)), zorder=1)
     ax.text(0.01, theta, f"θ-state Rg {theta:.2f} nm", transform=ax.get_yaxis_transform(),
             va="bottom", ha="left", fontsize=8, color=MUTED)
@@ -151,7 +163,7 @@ def plot(rows, events, summary, hist, m, out_dir: Path) -> None:
     _finish(fig, plt, ax, "Radius of gyration vs temperature, 357-aa RGD construct",
             f"Mean Rg over {window}; bar = SEM from 20 block averages. {one}\n"
             "Crossing temperature: linear interpolation between the bracketing sweep points.",
-            out_dir / "g6-tsw-rg.png")
+            out_dir / "g6-tsw-rg.png", slide=True)
 
     # 2. collapse fraction
     fig, ax = _axes(plt)
