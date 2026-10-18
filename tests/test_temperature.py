@@ -7,8 +7,8 @@ no temperature column, a blank cell, and a Shared left alone must all still
 produce exactly that — otherwise every run in used-runs.csv stops being
 comparable with every run after it.
 
-Run from the worktree root:
-    /home/tnartey/ELP-Simulations/.venv/bin/python -m pytest tests -q
+Run from the project root:
+    uv run pytest tests -q
 """
 
 from __future__ import annotations

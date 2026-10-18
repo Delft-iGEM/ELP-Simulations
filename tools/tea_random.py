@@ -12,7 +12,7 @@ g6-k8 set (tools/tea_g6.py) so they compare with it directly:
        VPGMG, drawn uniformly. These give the spread that random placement alone
        produces, against which the ten designed k8 arrangements can be judged.
   rk   10 random arrangements of both the 4 RGD blocks and the 4 VPGKG. The
-       chain is written as the RGD sweep wrote it (rgd-arrangement-sweep.csv):
+       chain is written as the RGD sweep wrote it (batches/rgd-arrangement-sweep.csv):
        "LQ" + 55 units, each "VP" + something - 4 RGD units (VP + the 23-mer),
        51 pentads (45 VPGIG, 4 VPGKG, 2 VPGMG). The two VPGMG stay at the units
        they occupy in the original (21 and 49); the 4 RGD and 4 VPGKG are drawn

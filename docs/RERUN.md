@@ -1,4 +1,4 @@
-# Re-running the 12 failed block runs — `block-runs-failed-v2.csv`
+# Re-running the 12 failed block runs — `batches/block-runs-failed-v2.csv`
 
 ## Why these 12
 
@@ -33,7 +33,7 @@ that force, which is exactly why they are fine.
 
 ## What this CSV is
 
-`block-runs-failed-v2.csv` is `block-runs.csv` filtered to the 12 crosslinking
+`batches/block-runs-failed-v2.csv` is `batches/block-runs.csv` filtered to the 12 crosslinking
 rows. **Only two fields differ from the originals**, verified cell by cell:
 
 * `Name` gains a `-v2` suffix, because the old names are burned in
@@ -90,7 +90,7 @@ Neither is a bug, and neither was changed on your behalf.
 1. **`G1 A1` is not a `GAGA` block** (BUG-BATCH-2). In the shorthand, `X<n>`
    means n copies of the pentapeptide `VPGXG`, so the "triblock" mid-blocks
    expand to `VPGGGVPGAG…`. If you meant a literal alanine-rich elastic block,
-   the cell has to read `(GAGAGAGA)`, as `Example-csv.csv` does. Changing it
+   the cell has to read `(GAGAGAGA)`, as `batches/Example-csv.csv` does. Changing it
    changes the sequences, so it is your call — and the 8 good `*-noxl` runs
    used the same expansion, so changing it here would break comparability with
    them.
@@ -109,7 +109,7 @@ junctions exist (`docs/DESIGN-crosslinker-models.md`).
 
 ## How to submit
 
-Point the notebook's `RUNS_CSV` at `block-runs-failed-v2.csv` and run the
+Point the notebook's `RUNS_CSV` at `batches/block-runs-failed-v2.csv` and run the
 planning and submit cells, or use the CLI per run. Keep
 `crosslink_start_step` and `surface_start_step` at 1,000,000 as before. The
 names have already been checked against `used-runs.csv` and `simulations/`, and

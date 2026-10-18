@@ -1,8 +1,8 @@
 """Pointing the Analyze section at a whole CSV of runs instead of one name.
 
 The Analyze section of ``analyze.ipynb`` is written around a single
-``sim_name``. A batch, though, is planned as a CSV (``block-runs.csv``,
-``used-runs.csv``, ``Example-csv.csv``, ...), and after it comes back from
+``sim_name``. A batch, though, is planned as a CSV (``batches/block-runs.csv``,
+``used-runs.csv``, ``batches/Example-csv.csv``, ...), and after it comes back from
 DelftBlue you want the same cells run over every row of that file — without
 babysitting it. Two things make that awkward, and this module handles both:
 

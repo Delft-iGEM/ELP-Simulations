@@ -23,8 +23,8 @@ against 0.404174 from the 4-dp route, consistent with a single digit in the 4th
 decimal. Pinning the identity keeps the test free of that provenance; the
 transcribed values are kept below as a documented cross-check.
 
-Run from the worktree root:
-    /home/tnartey/ELP-Simulations/.venv/bin/python -m pytest tests -q
+Run from the project root:
+    uv run pytest tests -q
 """
 
 from __future__ import annotations

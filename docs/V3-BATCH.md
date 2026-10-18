@@ -1,4 +1,4 @@
-# `block-runs-v3.csv` — the full 4 x 3 x 2 grid
+# `batches/block-runs-v3.csv` — the full 4 x 3 x 2 grid
 
 24 runs: four block sequences, each in all three attachment modes, each with
 lysine-lysine crosslinking on and off.
@@ -9,10 +9,10 @@ lysine-lysine crosslinking on and off.
 | **K–K off** | `<family>-brush-noxl-v3` | `<family>-free-noxl-v3` | `<family>-pre-noxl-v3` |
 
 Families: `monoblock` (720 residues), `triblock-32` (880), `triblock-64` (1040),
-`tetrablock` (1040). Sequences are copied verbatim from `block-runs.csv`, so
+`tetrablock` (1040). Sequences are copied verbatim from `batches/block-runs.csv`, so
 they are the same molecules as the v1 and v2 batches.
 
-**`brush-noxl` is new.** The original `block-runs.csv` had only 20 rows because
+**`brush-noxl` is new.** The original `batches/block-runs.csv` had only 20 rows because
 that combination was never included, which left the brush column without its
 control: there was no way to separate what crosslinking does from what the
 brush geometry does. v3 closes the grid.
@@ -96,5 +96,5 @@ three batches remain comparable.
 ## Submitting
 
 All 24 names are checked free against `used-runs.csv` and `simulations/`. Point
-the notebook's `RUNS_CSV` at `block-runs-v3.csv`, or prepare and submit from the
+the notebook's `RUNS_CSV` at `batches/block-runs-v3.csv`, or prepare and submit from the
 CLI.

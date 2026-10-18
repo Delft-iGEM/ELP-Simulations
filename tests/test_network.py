@@ -1,14 +1,14 @@
 """tools.network on hand-built graphs with known answers, plus two finished runs.
 
-Run from the worktree root:
-    /home/tnartey/ELP-Simulations/.venv/bin/python -m pytest tests/test_network.py -q
+Run from the project root:
+    uv run pytest tests/test_network.py -q
 
 The hand-built cases are the smallest networks that separate the metrics from
 each other: an inter bond (one surface-to-surface strand), a primary loop
 (a cycle that is not a strand), a trifunctional star (a real junction), a
 free-mode chain on one pin (everything dangling), and a chain pinned twice
 (a strand that needs no junction at all). The real-run case reads finished
-trajectories' event files from the main checkout, read-only, and pins the
+trajectories' event files under simulations/, read-only, and pins the
 numbers quoted in docs/NETWORK.md.
 """
 
@@ -25,9 +25,7 @@ from tools.network import (
     kT_per_nm3_pa, lysine_resids, read_events, summary_lines, topology_metrics, write_outputs,
 )
 
-MAIN_SIMS = Path("/home/tnartey/ELP-Simulations/simulations")
-SCRATCH = Path("/tmp/claude-686540/-home-tnartey-ELP-Simulations/"
-               "79dd0f10-f2dd-47ea-9bd0-3dfd10be601a/scratchpad")
+MAIN_SIMS = Path("simulations")
 
 
 def bond(ci, ri, cj, rj, kind=None, **extra):
@@ -224,7 +222,7 @@ def test_compare_table_lists_every_run():
 
 
 # ---------------------------------------------------------------------------
-# (e) finished runs from the main checkout — read-only
+# (e) finished runs under simulations/ — read-only
 
 REAL_RUNS = {
     # name: (n_crosslinks, n_intra, n_primary_loops, nu, mu, cycle_rank)
@@ -233,17 +231,17 @@ REAL_RUNS = {
 }
 
 
-def _out_dir(name: str) -> Path:
+def _out_dir(name: str, scratch: Path) -> Path:
     worktree_analysis = Path("simulations") / name / "analysis"
     if worktree_analysis.is_dir():
         return worktree_analysis
-    out = SCRATCH / name
+    out = scratch / name
     out.mkdir(parents=True, exist_ok=True)
     return out
 
 
 @pytest.mark.parametrize("name,expected", list(REAL_RUNS.items()))
-def test_e_real_runs(name, expected):
+def test_e_real_runs(name, expected, tmp_path):
     runtime = MAIN_SIMS / name / "runtime"
     if not (runtime / "crosslink_events.csv").is_file() or not (runtime / "metadata.csv").is_file():
         pytest.skip(f"{runtime} not available on this machine")
@@ -262,7 +260,7 @@ def test_e_real_runs(name, expected):
     assert m["G_affine_kPa"] > m["G_phantom_kPa"] >= 0
     assert m["height_source"].startswith("ideal coil")     # old metadata has no z-extent
 
-    out = _out_dir(name)
+    out = _out_dir(name, tmp_path)
     write_outputs(m, out / "network_summary.txt", out / "network.json")
     back = json.loads((out / "network.json").read_text())
     assert back["n_strands_active"] == nu

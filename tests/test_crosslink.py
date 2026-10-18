@@ -1,7 +1,7 @@
 """Unit tests for tools.crosslink — pure-geometry reactor, no OpenMM Context.
 
-Run from the worktree root:
-    /home/tnartey/ELP-Simulations/.venv/bin/python -m pytest tests -q
+Run from the project root:
+    uv run pytest tests -q
 """
 
 # OpenMM's System.addForce() takes ownership of the force: a temporary

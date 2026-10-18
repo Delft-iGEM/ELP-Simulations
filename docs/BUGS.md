@@ -339,7 +339,7 @@ saying `2:00` buys two *minutes*, not two hours, and the notebook's walltime
 totals and `walltime_used_fraction` were out by 60x for such rows. The forms
 `D-HH` and `D-HH:MM` were not accepted at all.
 **Fix:** both now implement SLURM's full grammar with SLURM's meaning.
-`block-runs.csv` uses `2:00:00` throughout, so the queued batch is unaffected.
+`batches/block-runs.csv` uses `2:00:00` throughout, so the queued batch is unaffected.
 **Status: fixed.**
 
 ## BUG-BATCH-2 — the ELP shorthand's `G1 A1` is not a GAGA block
@@ -350,10 +350,10 @@ totals and `walltime_used_fraction` were out by 60x for such rows. The forms
 In the shorthand, a token `X<n>` expands to n copies of the pentapeptide
 `VPGXG`. So `G1 A1 G1 A1 ...` is **`VPGGGVPGAGVPGGGVPGAG...`**, not the
 alanine-rich `GAGAGAGA` elastic block it reads as. Only a parenthesised
-fragment, `(GAGAGAGA)`, is inserted literally — and `Example-csv.csv` uses
-exactly that form, while `block-runs.csv` uses `G1 A1`.
+fragment, `(GAGAGAGA)`, is inserted literally — and `batches/Example-csv.csv` uses
+exactly that form, while `batches/block-runs.csv` uses `G1 A1`.
 
-Verified by expansion: the "triblock" mid-block in `block-runs.csv` comes out as
+Verified by expansion: the "triblock" mid-block in `batches/block-runs.csv` comes out as
 `...VPGGGVPGAGVPGGGVPGAG...`, i.e. more VPGxG repeats, not a GAGA block. The 20
 queued jobs are therefore running **pentapeptide-only sequences** — a legitimate
 ELP construct, but not the block copolymer the run names imply. The residue
@@ -376,7 +376,7 @@ you meant is a scientific decision, and it is yours.
 Brush mode rewrites residue 0 as the `Z` anchor tag, which CALVADOS treats as a
 valine. If the sequence starts with `K`, that lysine is simply not in the
 simulated chain: the run has one fewer reactive site than the sequence says, and
-nothing said so. Several `block-runs.csv` rows begin with `K1`, so those chains
+nothing said so. Several `batches/block-runs.csv` rows begin with `K1`, so those chains
 have 15 reactive lysines, not 16.
 **Fix:** `sim new` warns, naming both counts, and suggests prepending a spacer.
 **Status: fixed (warning).** Deliberately not auto-corrected — changing the

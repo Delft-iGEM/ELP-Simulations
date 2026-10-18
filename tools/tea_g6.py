@@ -10,7 +10,7 @@ here is extrapolated.
 
   16  lys      best 4 and worst 4 lysine arrangements of the 298-aa scaffold,
                ranked by inter-chain share of crosslink hits
-               (contacts-lysine-arrangement.csv / lysine-arrangement-results.xlsx).
+               (results/contacts-lysine-arrangement.csv / lysine-arrangement-results.xlsx).
   16  rgd      best 4 and worst 4 RGD arrangements of the 357-aa construct,
                ranked by 23-mer SASA over the 24 free-chain runs
                (figures/free-rgdarr/sasa-24-arrangements.csv).
@@ -63,7 +63,7 @@ PARTITION = "gpu-a100"
 CPUS = "18"
 SEED0 = 20261005
 
-# Ranked by inter_share_of_hits, contacts-lysine-arrangement.csv.
+# Ranked by inter_share_of_hits, results/contacts-lysine-arrangement.csv.
 LYS_BEST = ["lysarr12-even-4", "lysarr13-even-4-wide",
             "lysarr19-blockb", "lysarr20-blockc"]
 LYS_WORST = ["lysarr02-blk4-mid", "lysarr03-blk4-cterm",

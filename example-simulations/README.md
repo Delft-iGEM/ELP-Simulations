@@ -19,6 +19,6 @@ Each folder contains:
   and the plots).
 
 `runtime/` (trajectory, `metadata.csv`) is never committed. Run `prepare.py`
-(see the main README) to regenerate it.
+(see `docs/SIMULATIONS.md`) to regenerate it.
 
 To use an example with the `sim` tools, copy its folder into `simulations/`.

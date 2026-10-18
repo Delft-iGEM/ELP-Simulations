@@ -69,7 +69,7 @@ Everything else on this branch can proceed either way.
 ## How to resume safely
 
 Read `docs/AGENT-RULES.md`. In short: work only in this worktree
-(`/home/tnartey/ELP-Simulations-robust`, branch `robust-audit`), use
-`/home/tnartey/ELP-Simulations/.venv/bin/python` with the worktree as cwd, never
-`uv run`, never `sbatch`, and do not touch `/home/tnartey/ELP-Simulations` while
+(`<your checkout>/ELP-Simulations-robust`, branch `robust-audit`), use
+`<your checkout>/ELP-Simulations/.venv/bin/python` with the worktree as cwd, never
+`uv run`, never `sbatch`, and do not touch `<your checkout>/ELP-Simulations` while
 the batch is queued — those jobs import `tools/` from it at start-up.

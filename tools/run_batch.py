@@ -6,7 +6,7 @@ the planning notebook reads a CSV where every row is one run, previews all of
 them at once, and then submits the lot — instead of editing one cell per
 sequence and hoping the name hasn't been used before.
 
-The CSV (see ``Example-csv.csv``) has one row per run and holds only what
+The CSV (see ``batches/Example-csv.csv``) has one row per run and holds only what
 actually differs between runs::
 
     Name ;Sequence;concentration;nmolecules;steps;crosslink distance;crosslink prob;mode;walltime

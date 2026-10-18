@@ -2,8 +2,8 @@
 outputs). The chain-construction geometry (place_chains / build_chain) is
 covered elsewhere.
 
-Run from the worktree root:
-    /home/tnartey/ELP-Simulations/.venv/bin/python -m pytest tests -q
+Run from the project root:
+    uv run pytest tests -q
 """
 
 # OpenMM's System.addForce() takes ownership of the force: a temporary

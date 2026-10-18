@@ -5,7 +5,7 @@
     .venv/bin/python tools/sub4_mains.py submit --yes
 
 40 preattached runs, 16 chains, 400 ns, no crosslinking, TEA off, 293.15 K -
-the settings of the earlier sub4 batches (submodule4_extra_20.csv), but on the
+the settings of the earlier sub4 batches (batches/submodule4_extra_20.csv), but on the
 V100 partition because the A100 queue is busy.
 
 Walltime: the CSV's 1:30/2:00 was sized for A100, where sub4 runs took 56-84
