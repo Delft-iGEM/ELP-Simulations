@@ -49,21 +49,6 @@ cd ELP-Simulations
 uv sync --frozen
 ```
 
-### A session that survives closing the connection
-
-Anything started in a plain SSH terminal dies with it, Claude Code included.
-`./work.sh` opens (or re-attaches to) a tmux session called `claude` in this
-repo with Claude Code running inside; detach with `Ctrl-b` then `d`, or just
-close the laptop — the session and whatever is running in it keep going on
-the login node. Run `./work.sh` again to come back, `./work.sh status` to see
-whether it is still there, `./work.sh kill` to end it.
-
-The session lives on the login node it was started on (DelftBlue has several),
-so log in to that same node to re-attach — the script records it in
-`~/.claude-work-node` and tells you. DelftBlue has no tmux of its own; it is
-installed once into the conda env `tmux` from conda-forge (the script prints
-the two commands if it is missing).
-
 ### Where simulation data goes
 
 Trajectories are big — a few hundred MB per simulation — and DelftBlue caps
@@ -358,9 +343,10 @@ cutoff was generous and nothing was ever restrained.
   reaction is a pure distance criterion on coarse-grained beads. The *sequence
   and topology* of events is meaningful; the *rate* is not — do not report event
   times as kinetics.
-- CALVADOS2 has no temperature-dependent hydrophobicity, so it cannot reproduce
-  the LCST transition that drives coacervation in real ELP crosslinking. Use
-  HPS-T if the transition matters.
+- Stock CALVADOS2 has no temperature-dependent hydrophobicity, so with TEA off
+  (the default) it cannot reproduce the LCST transition that drives
+  coacervation in real ELP crosslinking. If the transition matters, turn on
+  [CALVADOS-TEA](#temperature-and-calvados-tea-opt-in).
 - The reaction distance dominates every result. Sweep it (0.5, 0.8, 1.2 nm) and
   report the sensitivity rather than one number.
 - Contacts in the first frames are artefacts of the initial placement, not
@@ -369,6 +355,66 @@ cutoff was generous and nothing was ever restrained.
   you used.
 - Valence changes the answer: Kawamoto et al. (Macromolecules 2015, 48, 8980)
   found A2+B4 networks far more prone to cyclic defects than A2+B3.
+
+### Temperature and CALVADOS-TEA (opt-in)
+
+**Temperature** is the thermostat temperature in **kelvin** (default 293.15 K,
+i.e. 20 °C). Anything outside 150–500 K is refused, and a value that looks like
+Celsius ("20") is named as such instead of queueing a 20 K run. On its own it
+only changes kT: stock CALVADOS2 gives every residue a constant stickiness
+(lambda), so a warmer run does **not** move the LCST.
+
+**CALVADOS-TEA** (`tools/tea.py`) makes lambda a function of temperature, so
+collapse on heating comes out of the force field. It implements Chen & Zeng
+(2026), *JACS Au* 6(8), 4478–4491,
+[doi:10.1021/jacsau.6c00523](https://doi.org/10.1021/jacsau.6c00523): hydration
+free energies are extrapolated from 300 K, mapped to an excess pair free energy,
+and scaled by **gamma** into a lambda shift. It is off by default, and with it off
+a run is bit-for-bit the stock pipeline. With it on, `prepare.py` writes a
+temperature-specific residues table into `runtime/` and never touches
+`residues_CALVADOS2.csv`.
+
+```bash
+sim new ... --temperature 350 --tea                  # gamma 6 (the default)
+sim new ... --temperature 285 --tea --tea-gamma 3
+```
+
+In a batch CSV the same settings are columns, with fallbacks in `Shared(...)`
+(`temperature`, `tea`, `tea_gamma`):
+
+| Column | Also accepted as | Values |
+| --- | --- | --- |
+| `temperature` | `temp`, `T`, `temperature (K)`, `thermostat` | kelvin |
+| `tea` | `calvados tea`, `temperature dependent` | `yes`/`no`, `1`/`0`, `on`/`off` |
+| `tea gamma` | `gamma` | positive number |
+
+Read before using it:
+
+- TEA only works between **280 and 380 K**, the validated range of the
+  underlying hydration fits. A TEA row outside it is refused.
+- **gamma = 6 is our own choice**, outside the {2, 3} the paper validated on
+  CALVADOS. Runs before 2026-10-05 used 3, and `metadata.csv` records which one
+  a run used.
+- The paper's printed equation 6 has a sign that contradicts the rest of the
+  paper. The code uses the opposite sign, which reproduces the check values in
+  `tests/test_tea.py`. This has not been cross-checked against the authors' own
+  code. `tools/tea.py` explains the reasoning.
+- Some residues leave lambda's usual [0, 1] range (Trp, Tyr and Phe go above 1
+  when warm; Glu goes slightly below 0). CALVADOS does not clamp lambda, so the
+  module docstring lists where this happens.
+
+The TEA series behind our results (single chains, brushes, lysine and RGD
+arrangements, temperature sweeps) have their own scripts. See
+[Analysis scripts](#analysis-scripts).
+
+### Ionic strength
+
+CALVADOS screens charges with Debye–Hückel, set by the ionic strength in
+**molar**. The default is 0.19 M, which every run used until the column existed.
+In a batch CSV, set it per row with an `ionic strength (M)` column (also accepted
+as `ionic` or `salt`). Blank cells fall back to `ionic` in `Shared(...)`, and
+negative values are refused. `Example-csv-ionic.csv` is the template with this
+column. There is no `sim new` flag for it.
 
 ### Attaching through lysines (`free` and `preattached` modes)
 
@@ -556,6 +602,118 @@ so save it after editing one. A run whose cells raise is reported and abandoned
 previous run's trajectory still loaded — and a run that simply has nothing to
 analyze (a sequence with no lysines, for the crosslink cells) is noted, not
 counted as a failure. `tools/analysis_batch.py` has the machinery.
+
+### Where one residue sits in z (`sim distribution`)
+
+`sim distribution` plots the distribution of one amino acid's height above the
+surface (z), pooled over every frame of a trajectory. For example, it shows where
+the lysines end up in a brush:
+
+```bash
+sim distribution --pdb simulations/<sim>/runtime/top.pdb \
+                 --dcd simulations/<sim>/runtime/<sim>.dcd --residue K
+```
+
+`--residue` takes a one-letter (`K`) or three-letter (`LYS`) code. `--bins` sets
+the histogram bins (default 60), `-o` / `--output` sets where the plot goes (by
+default next to the DCD), and `--show` also opens the plot interactively.
+
+## Analysis scripts
+
+The notebook covers one run or one CSV of runs. The series behind our results
+have their own scripts in `tools/`, grouped below by the result they produce.
+Run each one from the project root:
+
+```bash
+uv run python tools/<script>.py           # most also accept --help
+```
+
+The scripts follow two patterns:
+
+- **Run generators** (`plan`, `init`, `submit --yes`): `plan` prints the runs,
+  `init` writes `simulations/<name>/prepare.py` for each run and prepares it,
+  and `submit --yes` sends them to SLURM.
+- **Analysis scripts**: run with no arguments to analyse every finished run of
+  the series, which writes a CSV and figures into `figures/<series>/`.
+  `--plot-only` redraws the figures from that CSV without touching
+  trajectories.
+
+`tea_sweep.py` is the exception: `init` writes a signac-style
+`workspace/<job_id>/` instead of `simulations/`.
+
+`figures/` is not part of this repository, so run an analysis once before using
+`--plot-only`. `plot_sasa_24.py` and several of the RGD scripts also read
+`figures/free-rgdarr/sasa-24-arrangements.csv`, which no script in `tools/`
+writes and which is not in this repository.
+
+Some generators take their sequences from earlier runs, so `simulations/` keeps
+just the `prepare.py` of those source runs (no results):
+
+- `simulations/0r0g0d1-2-4-7-focused/`: the original 357-aa RGD construct,
+  read by `tea_sequences.py`. That module is used by `tea_temps`, `tea_g6`,
+  `tea_lysramp`, `tea_random` and `tea_tsweep`.
+- `simulations/rgdarr01-*` … `rgdarr24-*`: read by `rgdarr_graft.py`.
+- `simulations/free-rgdarr01-*` … `free-rgdarr24-*`: read by `tea_temps.py`,
+  `tea_g6.py` and `tea_pairs.py`.
+- `simulations/lysarr01/02/03/09/12/13/19/20-*`: the best and worst lysine
+  arrangements, read by `tea_g6.py` and `tea_pairs.py`.
+- `simulations/tea-{lys,rgd}-{best,worst}-free-350k/`: `tea_temps.py` takes
+  the seeds for its no-TEA controls from these runs' `runtime/config.yaml`.
+  Run `tea_pairs.py init` before `tea_temps.py init`.
+
+Every other run folder is in the
+[full repository](https://github.com/Delft-iGEM/ELP-Simulations).
+
+### Temperature response (CALVADOS-TEA)
+
+| Series | Generate runs | Analyse / plot |
+| --- | --- | --- |
+| (VPGXG)₈₄ sequences × temperatures | `tea_sweep.py init` / `submit` / `status` | `tea_analysis.py` (Rg, collapse fraction, scaling exponent ν) |
+| 270 / 350 K set and no-TEA controls | `tea_temps.py` (sequences from `tea_sequences.py`) | `plot_tea_temps.py --rg-csv <csv>` → `figures/tt/` |
+| γ = 6, 285 / 370 K single chains | `tea_g6.py` | `tea_g6_analysis.py`, `plot_tea_g6.py`, `tea_g6_states.py` (collapsed vs extended) → `figures/g6/` |
+| Temperature sweep, 275–380 K in 5 K steps | `tea_tsweep.py` | `tea_tsweep_analysis.py` (thermoresponse), `tea_tsweep_sasa.py` (exposure) → `figures/g6-tsw/` |
+| Random arrangements, 285 / 370 K | `tea_random.py` | `tea_random_analysis.py` (Rg, collapsed-state dwells) → `figures/g6-random/` |
+| Best/worst pairs, brush vs free chain, 280 / 350 K | `tea_pairs.py` | `tea_pairs_sasa.py` → `figures/tea-pairs/` |
+
+### Lysine placement and amount
+
+| Series | Generate runs | Analyse / plot |
+| --- | --- | --- |
+| Lysine fraction, (VPGIG)₉₆ with 0–100 % VPGKG | `tea_lysfrac.py` | `tea_lysfrac_analysis.py` → `figures/g6-kfrac/` |
+| Lysine ramp, 4 → 49 VPGKG | `tea_lysramp.py` | `tea_lysramp_analysis.py`, `tea_lysramp_dwells.py`, `plot_lysramp_290k.py` → `figures/g6-kspc-kend/` |
+| 8-lysine arrangements (g6-k8-*) | `tea_g6.py` | `tea_k8_dwells.py` (collapsed-state dwells) → `figures/g6/` |
+| Submodule 4: lysine contacts, Rg and SASA on the surface | `sub4_mains.py`, or the `*sub4*` CSVs through the notebook | `sub4_analysis.py` (`--runs 'sub4-extra2-*'` for a subset) → `figures/sub4/` |
+| Lysine-arrangement runs (`lysarr*`) | `lysine-arrangement-sweep.csv` through the notebook | `build_lysine_workbook.py` → `lysine-arrangement-results.xlsx` |
+
+### RGD exposure (functional motif accessibility)
+
+| Series | Generate runs | Analyse / plot |
+| --- | --- | --- |
+| 24 RGD arrangements (`rgdarr*`, preattached) | `rgd-arrangement-sweep.csv` through the notebook | the notebook's Analyze section |
+| The same 24 as free single chains (`free-rgdarr*`) | — (no generator script in this repository) | `plot_sasa_24.py`, `rgd_distance.py` (mean distance between the 4 RGD sites) → `figures/free-rgdarr/` |
+| The same 24, grafted at 0.03 chains/nm² for 500 ns (`rgdg*`) | `rgdarr_graft.py` | `rgdg_analysis.py` (SASA and Rg) → `figures/rgdg/` |
+| RGD placement, collapsed vs extended (g6-rgd*) | `tea_g6.py` | `g6_rgd_states.py` → `figures/g6/` |
+| Grafted vs free exposure | — | `build_sasa_workbook.py` → `sasa-grafted-vs-free.xlsx` |
+| Two designs head to head | — | `sasa_two_sample.py <run-a> <run-b>` (Welch t-test across the 16 chains) |
+
+`dwell_slides.py lysramp` / `dwell_slides.py rgd` redraws the dwell figures as
+single-panel slide versions.
+
+### Shared building blocks
+
+These modules have no command of their own. The notebook and the scripts above
+import them:
+
+- `sasa.py`: solvent-accessible surface area of a motif for coarse-grained
+  beads. It uses CALVADOS bead sizes, because standard SASA tools assume atoms.
+- `hydrodynamic.py`: hydrodynamic radius (Rh, what dynamic light scattering
+  measures) next to Rg.
+- `network.py`: network topology of a crosslinked coating, built from
+  `crosslink_events.csv`.
+- `analysis_workbook.py`: one spreadsheet (contacts, bonds, equilibration)
+  from a batch of finished runs' `analysis/` folders.
+- `analysis_io.py`, `paths.py`: where analysis output and trajectory data live.
+- `elibpy.py`: the ELP sequence shorthand (`V20`, `K1 V4`, ...).
 
 ### Shell autocomplete
 
