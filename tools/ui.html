@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELP radius of gyration</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f5f5f3; --surface: #fcfcfb; --line: #e4e3df; --grid: #ecebe7;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #6f6e69;
+  --series: #2a78d6; --muted-series: #a8a7a1; --band: #f0efeb;
+  --accent: #2a78d6; --accent-ink: #fff; --warn: #8a5a00; --warn-bg: #fdf4e0;
+  --bad: #b3261e; --bad-bg: #fcebea;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --line: #33332f; --grid: #2a2a27;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #9a998f;
+    --series: #3987e5; --muted-series: #6a6962; --band: #232321;
+    --accent: #3987e5; --accent-ink: #fff; --warn: #f0c060; --warn-bg: #33290f;
+    --bad: #f2a29c; --bad-bg: #3a1a18;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 60px; }
+h1 { font-size: 22px; margin: 0 0 20px; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+.layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 18px; margin-bottom: 20px; }
+label { display: block; font-size: 13px; font-weight: 550; color: var(--text-2); margin-bottom: 4px; }
+input, textarea, select { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
+.field { margin-bottom: 14px; }
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.hint { font-size: 13px; color: var(--text-3); margin-top: 5px; min-height: 19px; overflow-wrap: anywhere; }
+.hint.err { color: var(--bad); }
+button { font: inherit; font-weight: 600; border-radius: 6px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--text); }
+button.primary { width: 100%; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.jobs { list-style: none; margin: 0; padding: 0; }
+.jobs button { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left;
+  font-weight: 400; border: 0; border-radius: 6px; padding: 8px; }
+.jobs button:hover { background: var(--band); }
+.jobs button[aria-current="true"] { background: var(--band); }
+.jobs .sub { display: block; font-size: 12.5px; color: var(--text-3); }
+.jobs .val { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+.jobs .state { white-space: nowrap; font-size: 13px; color: var(--text-2); }
+.empty { color: var(--text-3); }
+.hero { font-size: 44px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hero small { font-size: 20px; font-weight: 500; color: var(--text-2); }
+.title { overflow-wrap: anywhere; }
+.meta { color: var(--text-2); font-size: 13.5px; margin: 4px 0 14px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 14px 0; }
+.stats div { font-size: 13px; color: var(--text-2); }
+.stats b { display: block; font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.note { border-radius: 6px; padding: 9px 12px; margin: 12px 0; font-size: 14px; }
+.note.warn { background: var(--warn-bg); color: var(--warn); }
+.note.bad { background: var(--bad-bg); color: var(--bad); }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 8px 0 0; }
+.bar { height: 8px; background: var(--band); border-radius: 4px; overflow: hidden; margin: 12px 0 8px; }
+.bar i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+#chart { position: relative; }
+#chart svg { display: block; width: 100%; touch-action: pan-y; }
+#chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; font-size: 13px; white-space: nowrap; display: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+#tip b { font-variant-numeric: tabular-nums; }
+#tip span { display: block; color: var(--text-3); font-size: 12px; }
+.actions { display: flex; gap: 14px; align-items: center; margin-top: 12px; font-size: 14px; }
+a { color: var(--accent); }
+details { font-size: 13px; color: var(--text-2); margin-top: 12px; }
+details code { display: block; margin-top: 6px; overflow-wrap: anywhere; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+<h1>ELP radius of gyration</h1>
+<div class="layout">
+  <div>
+    <form class="card" id="form">
+      <div class="field">
+        <label for="sequence">Sequence</label>
+        <textarea id="sequence" rows="5" spellcheck="false" required
+          placeholder="I18 K17 I17 K18 RGD"></textarea>
+        <div class="hint" id="parsed">Use blocks or a raw sequence. K70 means 70 VPGKG repeats.</div>
+      </div>
+      <div class="field">
+        <label for="name">Name (optional)</label>
+        <input id="name" maxlength="80" autocomplete="off">
+      </div>
+      <div class="row field">
+        <div><label for="temp">Temp (°C)</label><input id="temp" type="number" step="any" min="0" max="100" value="20" required></div>
+        <div><label for="ionic">Ionic str. (M)</label><input id="ionic" type="number" step="any" min="0.01" max="2" value="0.13" required></div>
+        <div><label for="ph">pH</label><input id="ph" type="number" step="any" min="1" max="14" value="7.5" required></div>
+      </div>
+      <div class="field">
+        <label for="preset">Run length</label>
+        <select id="preset"></select>
+      </div>
+      <button class="primary" id="run" type="submit">Run simulation</button>
+      <div class="hint err" id="formError" role="alert"></div>
+    </form>
+    <section class="card">
+      <h2>Runs</h2>
+      <ul class="jobs" id="jobs"></ul>
+    </section>
+  </div>
+  <section class="card" id="detail" aria-live="polite">
+    <p class="empty">Enter a sequence and run it. The result appears here.</p>
+  </section>
+</div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let presets = {}, selected = null, shownKey = null, lastPlans = null, chartData = null;
+
+function el(tag, props = {}, ...kids) {
+  const n = Object.assign(document.createElement(tag), props);
+  n.append(...kids);
+  return n;
+}
+function svg(tag, attrs = {}, text) {
+  const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+async function api(path, body) {
+  const opts = body === undefined ? {} : {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)};
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+const fmtNs = ns => ns >= 100 ? ns.toFixed(0) : ns.toFixed(1);
+function fmtDuration(s) {
+  if (s == null) return 'estimating time left';
+  if (s < 90) return 'about ' + Math.max(1, Math.round(s)) + ' s left';
+  if (s < 5400) return 'about ' + Math.round(s / 60) + ' min left';
+  return 'about ' + (s / 3600).toFixed(1) + ' h left';
+}
+const jobTitle = j => j.name || `${j.n_residues} residues`;
+const jobMeta = j => `${j.n_residues} residues · ${j.temp_c} °C · ${j.ionic} M · pH ${j.ph}`;
+
+/* Form */
+function renderPresetOptions() {
+  const current = $('preset').value || 'fast';
+  $('preset').replaceChildren(...Object.entries(presets).map(([key, p]) => {
+    const plan = lastPlans && lastPlans[key];
+    const suffix = plan ? ` (${fmtNs(plan.simulated_ns)} ns simulated)` : ` (${p.frames} frames)`;
+    return el('option', {value: key, textContent: p.label + suffix});
+  }));
+  $('preset').value = current;
+}
+let parseTimer, parseCount = 0;
+function onSequenceInput() {
+  clearTimeout(parseTimer);
+  parseTimer = setTimeout(async () => {
+    const hint = $('parsed'), text = $('sequence').value;
+    const mine = ++parseCount;
+    if (!text.trim()) {
+      hint.className = 'hint';
+      hint.textContent = 'Use blocks or a raw sequence. K70 means 70 VPGKG repeats.';
+      lastPlans = null; renderPresetOptions();
+      return;
+    }
+    const r = await api('/api/parse', {sequence: text});
+    if (mine !== parseCount) return;
+    if (r.error) {
+      hint.className = 'hint err'; hint.textContent = r.error;
+      lastPlans = null;
+    } else {
+      hint.className = 'hint';
+      const s = r.sequence;
+      const shown = s.length > 44 ? s.slice(0, 20) + '…' + s.slice(-20) : s;
+      hint.textContent = `${r.n_residues} residues: ${shown}`;
+      lastPlans = r.plans;
+    }
+    renderPresetOptions();
+  }, 200);
+}
+$('sequence').addEventListener('input', onSequenceInput);
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('formError').textContent = '';
+  $('run').disabled = true;
+  try {
+    const {id} = await api('/api/jobs', {
+      sequence: $('sequence').value, name: $('name').value, preset: $('preset').value,
+      temp_c: $('temp').value, ionic: $('ionic').value, ph: $('ph').value});
+    selected = id; shownKey = null;
+    await refresh();
+  } catch (err) {
+    $('formError').textContent = err.message;
+  } finally {
+    $('run').disabled = false;
+  }
+});
+
+/* Runs list */
+const STATE_LABEL = {queued: 'Queued', running: 'Running', cancelled: 'Cancelled',
+  failed: 'Failed', interrupted: 'Interrupted'};
+function renderJobs(jobs) {
+  const list = $('jobs');
+  if (!jobs.length) {
+    list.replaceChildren(el('li', {className: 'empty', textContent: 'No runs yet.'}));
+    return;
+  }
+  list.replaceChildren(...jobs.map(j => {
+    const right = j.status === 'done'
+      ? el('span', {className: 'val', textContent: j.result.rg_mean.toFixed(2) + ' nm'})
+      : el('span', {className: 'state', textContent: j.status === 'running'
+          ? `${Math.round(j.progress.fraction * 100)}%` : STATE_LABEL[j.status]});
+    const left = el('span', {className: 'title'}, jobTitle(j),
+      el('span', {className: 'sub', textContent: `${j.temp_c} °C · ${j.ionic} M · pH ${j.ph}`}));
+    const b = el('button', {type: 'button'}, left, right);
+    if (j.id === selected) b.setAttribute('aria-current', 'true');
+    b.addEventListener('click', () => { selected = j.id; shownKey = null; refresh(); });
+    return el('li', {}, b);
+  }));
+}
+
+/* Result panel */
+async function renderDetail(job) {
+  const panel = $('detail');
+  if (job.status === 'running' || job.status === 'queued') {
+    const frac = job.status === 'running' ? job.progress.fraction : 0;
+    const status = job.status === 'queued' ? 'Waiting for the current run to finish.'
+      : `${Math.round(frac * 100)}% · ${fmtDuration(job.progress.eta_s)}`;
+    const existing = panel.querySelector('[data-live]');
+    if (existing && existing.dataset.live === job.id) {
+      existing.querySelector('i').style.width = (frac * 100) + '%';
+      existing.querySelector('[data-status]').textContent = status;
+      return;
+    }
+    const fill = el('i'); fill.style.width = (frac * 100) + '%';
+    const cancel = el('button', {type: 'button', textContent: 'Cancel run'});
+    cancel.addEventListener('click', async () => {
+      await api(`/api/jobs/${job.id}/cancel`, {}); shownKey = null; refresh();
+    });
+    const statusLine = el('p', {className: 'meta', textContent: status});
+    statusLine.dataset.status = '';
+    const wrap = el('div', {},
+      el('h2', {className: 'title', textContent: jobTitle(job)}),
+      el('p', {className: 'meta', textContent: `${jobMeta(job)} · ${fmtNs(job.simulated_ns)} ns simulated`}),
+      el('div', {className: 'bar'}, fill),
+      statusLine,
+      cancel);
+    wrap.dataset.live = job.id;
+    panel.replaceChildren(wrap);
+    return;
+  }
+
+  const key = job.id + job.status;
+  if (key === shownKey) return;
+  shownKey = key;
+  const d = await api(`/api/jobs/${job.id}`);
+  const head = [el('h2', {className: 'title', textContent: jobTitle(d)}),
+                el('p', {className: 'meta', textContent: jobMeta(d)})];
+
+  if (d.status !== 'done') {
+    const body = {
+      cancelled: el('p', {className: 'empty', textContent: 'This run was cancelled.'}),
+      interrupted: el('p', {className: 'empty', textContent: 'This run stopped when the server was closed.'}),
+      failed: el('div', {className: 'note bad'}, '⚠ The simulation failed.', el('pre', {textContent: d.error || ''})),
+    }[d.status];
+    panel.replaceChildren(...head, body);
+    chartData = null;
+    return;
+  }
+
+  const r = d.result;
+  const parts = [...head,
+    el('div', {className: 'hero'}, `${r.rg_mean.toFixed(2)} `,
+      el('small', {textContent: `± ${r.rg_sem.toFixed(2)} nm`})),
+    el('p', {className: 'meta', textContent: 'Cumulative Rg at the end of the run ± standard error from block averaging'})];
+  if (!r.settled) parts.push(el('div', {className: 'note warn',
+    textContent: `⚠ Not settled: the first half averages ${r.first_half.toFixed(2)} nm and the second ${r.second_half.toFixed(2)} nm. Use a longer run before relying on this value.`}));
+  const stat = (label, value) => el('div', {}, el('b', {textContent: value}), label);
+  parts.push(el('div', {className: 'stats'},
+    stat('Frame-to-frame SD', `${r.rg_std.toFixed(2)} nm`),
+    stat('First half', `${r.first_half.toFixed(2)} nm`),
+    stat('Second half', `${r.second_half.toFixed(2)} nm`),
+    stat('Frames used', `${r.frames_used} of ${r.frames_used + r.frames_discarded}`),
+    stat('Simulated', `${fmtNs(d.simulated_ns)} ns on ${r.platform}`)));
+  parts.push(el('div', {id: 'chart'}));
+  parts.push(el('div', {className: 'actions'},
+    el('a', {href: `/api/jobs/${d.id}/rg.csv`, textContent: 'Download cumulative and per-frame Rg (CSV)'})));
+  parts.push(el('details', {}, el('summary', {textContent: 'Sequence and files'}),
+    el('code', {textContent: d.sequence}),
+    el('code', {textContent: `Folder: runs/${d.id}/`})));
+  panel.replaceChildren(...parts);
+  chartData = {t: d.series.time_ns, rg: d.series.rg_nm, cum: d.series.cumulative_nm, skip: r.frames_discarded};
+  drawChart();
+}
+
+/* Charts: cumulative Rg on its own scale, per-frame Rg beneath, sharing a time axis */
+function niceTicks(lo, hi, count) {
+  const raw = (hi - lo) / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) ticks.push(+v.toFixed(6));
+  return {ticks, decimals: step < 0.1 ? 2 : step < 1 ? 1 : 0};
+}
+const MIN_CUMULATIVE_SPAN = 0.2; // nm; keeps small wobbles from filling the panel
+function drawChart() {
+  const host = $('chart');
+  if (!host || !chartData) return;
+  const {t, rg, cum, skip} = chartData;
+  const W = host.clientWidth, H = 470, left = 44, right = 16, tEnd = t[t.length - 1];
+  const x = v => left + (v / tEnd) * (W - left - right);
+  const splitX = x(t[skip - 1]);
+  const root = svg('svg', {viewBox: `0 0 ${W} ${H}`, height: H, tabindex: 0, role: 'img',
+    'aria-label': `Cumulative radius of gyration over ${tEnd.toFixed(0)} nanoseconds, ending at ${cum[cum.length - 1].toFixed(2)} nanometres, above the per-frame radius of gyration`});
+
+  const panel = (title, top, h, values, minSpan, tickCount) => {
+    const finite = values.filter(v => v !== null);
+    let lo = Math.min(...finite), hi = Math.max(...finite);
+    const pad = Math.max((hi - lo) * 0.08, (minSpan - (hi - lo)) / 2, 0.01);
+    lo -= pad; hi += pad;
+    const {ticks, decimals} = niceTicks(lo, hi, tickCount);
+    lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+    const y = v => top + (1 - (v - lo) / (hi - lo)) * h;
+    root.append(svg('text', {x: 8, y: top - 12, 'font-size': 13, 'font-weight': 600, fill: 'var(--text)'}, title));
+    root.append(svg('rect', {x: left, y: top, width: splitX - left, height: h, fill: 'var(--band)'}));
+    for (const v of ticks) {
+      root.append(svg('line', {x1: left, x2: W - right, y1: y(v), y2: y(v), stroke: 'var(--grid)'}));
+      root.append(svg('text', {x: left - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 12, fill: 'var(--text-3)'}, v.toFixed(decimals)));
+    }
+    return y;
+  };
+  const line = (values, y, from, to, stroke, width) => {
+    let d = '';
+    for (let i = from; i <= to; i++) d += `${i === from ? 'M' : 'L'}${x(t[i]).toFixed(1)} ${y(values[i]).toFixed(1)}`;
+    return svg('path', {d, fill: 'none', stroke, 'stroke-width': width, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'});
+  };
+
+  const topA = 28, hA = 230, topB = 300, hB = 110;
+  const yCum = panel('Cumulative Rg up to each time (nm)', topA, hA, cum, MIN_CUMULATIVE_SPAN, 6);
+  root.append(line(cum, yCum, skip, t.length - 1, 'var(--series)', 2));
+  const last = cum[cum.length - 1];
+  root.append(svg('circle', {cx: x(tEnd), cy: yCum(last), r: 4, fill: 'var(--series)', stroke: 'var(--surface)', 'stroke-width': 2}));
+  root.append(svg('text', {x: W - right, y: Math.max(topA + 12, yCum(last) - 10), 'text-anchor': 'end', 'font-size': 13, 'font-weight': 600, fill: 'var(--text)'}, `${last.toFixed(2)} nm`));
+
+  const yRg = panel('Rg at each frame (nm)', topB, hB, rg, 0, 3);
+  root.append(line(rg, yRg, 0, skip, 'var(--muted-series)', 1.5));
+  root.append(line(rg, yRg, skip, t.length - 1, 'var(--series)', 1.5));
+
+  const axisY = topB + hB;
+  for (const v of niceTicks(0, tEnd, Math.max(3, Math.floor(W / 110))).ticks) {
+    root.append(svg('text', {x: x(v), y: axisY + 18, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--text-3)'}, v));
+  }
+  root.append(svg('text', {x: (left + W - right) / 2, y: H - 12, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--text-2)'}, 'Simulated time (ns). Grey section: equilibration, excluded from the cumulative Rg.'));
+
+  const cross = svg('line', {y1: topA, y2: axisY, stroke: 'var(--text-3)', visibility: 'hidden'});
+  const dotCum = svg('circle', {r: 4, fill: 'var(--series)', stroke: 'var(--surface)', 'stroke-width': 2, visibility: 'hidden'});
+  const dotRg = svg('circle', {r: 4, fill: 'var(--series)', stroke: 'var(--surface)', 'stroke-width': 2, visibility: 'hidden'});
+  root.append(cross, dotCum, dotRg);
+  const tip = el('div', {id: 'tip'});
+  host.replaceChildren(root, tip);
+
+  let current = t.length - 1;
+  const show = i => {
+    current = i;
+    const cx = x(t[i]), kept = i >= skip;
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    dotRg.setAttribute('cx', cx); dotRg.setAttribute('cy', yRg(rg[i])); dotRg.setAttribute('visibility', 'visible');
+    dotCum.setAttribute('visibility', kept ? 'visible' : 'hidden');
+    if (kept) { dotCum.setAttribute('cx', cx); dotCum.setAttribute('cy', yCum(cum[i])); }
+    tip.replaceChildren(
+      el('b', {textContent: kept ? `${cum[i].toFixed(2)} nm cumulative` : 'Excluded from cumulative'}),
+      el('span', {textContent: `${rg[i].toFixed(2)} nm at this frame · ${t[i].toFixed(2)} ns`}));
+    tip.style.display = 'block';
+    tip.style.left = (cx + 12 + tip.offsetWidth > W ? cx - tip.offsetWidth - 12 : cx + 12) + 'px';
+    tip.style.top = (topA + 4) + 'px';
+  };
+  const hide = () => {
+    for (const n of [cross, dotCum, dotRg]) n.setAttribute('visibility', 'hidden');
+    tip.style.display = 'none';
+  };
+  root.addEventListener('pointermove', e => {
+    const px = e.clientX - root.getBoundingClientRect().left;
+    const v = (px - left) / (W - left - right) * tEnd;
+    let best = 0;
+    for (let i = 1; i < t.length; i++) if (Math.abs(t[i] - v) < Math.abs(t[best] - v)) best = i;
+    show(best);
+  });
+  root.addEventListener('pointerleave', hide);
+  root.addEventListener('blur', hide);
+  root.addEventListener('keydown', e => {
+    const d = {ArrowLeft: -1, ArrowRight: 1}[e.key];
+    if (d) { e.preventDefault(); show(Math.min(t.length - 1, Math.max(0, current + d))); }
+  });
+}
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawChart, 100); });
+
+/* Polling */
+async function refresh() {
+  const jobs = await api('/api/jobs');
+  if (!selected && jobs.length) selected = jobs[0].id;
+  renderJobs(jobs);
+  const job = jobs.find(j => j.id === selected);
+  if (job) await renderDetail(job);
+}
+(async () => {
+  presets = await api('/api/presets');
+  renderPresetOptions();
+  await refresh();
+  setInterval(() => refresh().catch(() => {}), 2000);
+})();
+</script>
+</body>
+</html>

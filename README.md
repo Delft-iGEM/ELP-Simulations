@@ -98,6 +98,22 @@ sim run     i70-surfaceattached   # run locally
 sim submit  i70-surfaceattached   # sbatch on DelftBlue
 ```
 
+### Getting the radius of gyration for a sequence
+
+For a quick answer without writing a `prepare.py`, open the local web page:
+
+```bash
+sim ui
+```
+
+Enter a sequence as blocks (`I18 K17 I17 K18 RGD`, where `K70` means 70 `VPGKG`
+repeats), a raw sequence, or FASTA. Set the conditions, pick a run length, and run.
+The page plots the cumulative Rg (the mean of all kept frames up to each time) above
+the per-frame Rg, reports the final value with its standard error, and lets you
+download both. The chain is a single free molecule, and the first 10% of frames are
+excluded as equilibration. The default Fast preset simulates 14 ns. Runs execute one
+at a time and are saved under `runs/`.
+
 ### Shell autocomplete
 
 Install completion once (detects your shell automatically — bash, zsh, fish, or PowerShell):

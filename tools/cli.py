@@ -6,6 +6,7 @@ Commands:
   sim run     <simulation>   Run the simulation locally
   sim submit  <simulation>   Submit via sbatch on DelftBlue
   sim list                   List all available simulations
+  sim ui                     Open the web page for simulating a sequence and getting its Rg
 
 Autocomplete:
   sim --install-completion   Install shell completion (bash/zsh/fish/PowerShell)
@@ -169,6 +170,43 @@ def list_simulations() -> None:
     typer.echo("Available simulations:")
     for s in sims:
         typer.echo(f"  {s}")
+
+
+@app.command()
+def ui(
+    port: Annotated[int, typer.Option(help="Port to serve the page on.")] = 8765,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Open a browser tab.")] = True,
+) -> None:
+    """Open a local web page: enter a sequence, simulate it, get the radius of gyration."""
+    import signal
+    import webbrowser
+
+    from tools.ui import serve
+
+    # Closing the terminal must stop the simulation too, not leave it holding the GPU.
+    def _stop(*_) -> None:
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _stop)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, _stop)
+
+    try:
+        server, manager = serve(port)
+    except OSError as exc:
+        typer.echo(f"Error: can't use port {port} ({exc}). Try --port <other>.", err=True)
+        raise typer.Exit(1)
+
+    url = f"http://localhost:{port}"
+    typer.echo(f"▶  ELP Rg page: {url}  (Ctrl+C to stop; this also stops a running simulation)")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        typer.echo("\nStopping.")
+    finally:
+        manager.shutdown()
 
 
 # ---------------------------------------------------------------------------

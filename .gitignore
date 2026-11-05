@@ -20,6 +20,7 @@ var/
 .installed.cfg
 *.egg
 simulations/*/runtime
+runs/
 logs/
 
 # Installer logs
