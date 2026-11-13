@@ -114,6 +114,19 @@ download both. The chain is a single free molecule, and the first 10% of frames 
 excluded as equilibration. The default Fast preset simulates 14 ns. Runs execute one
 at a time and are saved under `runs/`.
 
+To compare runs, tick two or more finished ones and press **Race selected**. Their
+cumulative Rg curves grow together on a shared time axis, beside renders of each
+chain moving along its trajectory. To give a run a picture, open it and paste with
+Ctrl+V. The picture rides ahead of that run's line, and the winner's fills the screen
+at the finish. **Hide Rg & score** hides every run's Rg and score until you're ready to race.
+
+Every run uses the same conditions (20 °C, 0.13 M, pH 7.5, Fast). Each run needs a
+target Rg, and its score is shown with its Rg:
+900 − 100 × (nm from target), plus a variation bonus for different listed blocks
+(ELP I/K/E/F/A/C/V/Q/W × 5/10/20, RGD, KR12, SAAP, IKVAV, XBBXBX; 7+ types = 50),
+plus 50 when the sequence has the adhesion domain for the tissue the target falls in
+(bone < 4 nm: RGD, skin 4–5 nm: IKVAV, brain ≥ 5 nm: XBBXBX). The block list is in `tools/rg.py`.
+
 ### Shell autocomplete
 
 Install completion once (detects your shell automatically — bash, zsh, fish, or PowerShell):

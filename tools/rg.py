@@ -14,6 +14,7 @@ import numpy as np
 
 from tools.elibpy import build_sequence_with_features
 
+RESIDUES_CSV = Path(__file__).resolve().parent.parent / "residues_CALVADOS2.csv"
 AMINO_ACIDS = set("ACDEFGHIKLMNPQRSTVWY")
 MIN_RESIDUES = 5
 
@@ -34,18 +35,72 @@ PRESETS = {
 }
 
 
+# Blocks that count towards the block-variation bonus.
+# ELP blocks: guest residue + repeat count, e.g. K10 = 10 x VPGKG.
+ELP_GUESTS = "IKEFACVQW"
+ELP_REPEATS = (5, 10, 20)
+# Named blocks. Typing the name inserts `seq`. Adhesion domains carry the tissue they bind,
+# matching the Rg regions on the race chart (race.js RG_REGIONS).
+NAMED_BLOCKS = {
+    "RGD": {"seq": "RGD", "kind": "adhesion", "tissue": "Bone"},
+    "IKVAV": {"seq": "IKVAV", "kind": "adhesion", "tissue": "Skin"},
+    # Cardin-Weintraub heparin-binding motif (X hydropathic, B basic); AKKARA is one instance.
+    "XBBXBX": {"seq": "AKKARA", "kind": "adhesion", "tissue": "Brain"},
+    "KR12": {"seq": "KRIVQRIKDFLR", "kind": "amp", "tissue": None},  # LL-37 residues 18-29
+    "SAAP": {"seq": "LKRVWKRVFKLLKRYWRQLKKPVR", "kind": "amp", "tissue": None},  # SAAP-148
+}
+BLOCK_ALIASES = {"SAAP148": "SAAP"}
+# Bonus by number of different block types; 7 or more gets the full 50.
+VARIATION_POINTS = (0, 0, 5, 10, 20, 35, 45, 50)
+
+
 class SequenceError(ValueError):
     """The user's input can't be turned into a sequence; the message is user-facing."""
+
+
+def tokenize(text: str) -> list[str]:
+    lines = [line for line in text.splitlines() if not line.lstrip().startswith(">")]
+    tokens = [t for t in re.split(r"[\s,\-]+", " ".join(lines).upper()) if t]
+    return [BLOCK_ALIASES.get(t, t) for t in tokens]
+
+
+def block_type(token: str) -> str | None:
+    """The block type a token counts as for the variation bonus, or None if it isn't a listed block."""
+    if token in NAMED_BLOCKS:
+        return token
+    match = re.fullmatch(r"([A-Z])(\d+)", token)
+    if match and match[1] in ELP_GUESTS and int(match[2]) in ELP_REPEATS:
+        return match[1]
+    return None
+
+
+def analyze_blocks(text: str) -> dict:
+    """Which listed blocks the input uses, and the variation bonus they earn."""
+    types, unscored = [], []
+    for token in tokenize(text):
+        kind = block_type(token)
+        if kind is None:
+            if token not in unscored:
+                unscored.append(token)
+        elif kind not in types:
+            types.append(kind)
+    tissues = sorted({NAMED_BLOCKS[t]["tissue"] for t in types if t in NAMED_BLOCKS and NAMED_BLOCKS[t]["tissue"]})
+    return {
+        "types": types,
+        "unscored": unscored,
+        "adhesion_tissues": tissues,
+        "variation_pts": VARIATION_POINTS[min(len(types), len(VARIATION_POINTS) - 1)],
+    }
 
 
 def parse_sequence(text: str) -> str:
     """Turn user input into a one-letter sequence.
 
     Accepts FASTA, raw sequence, or the elibpy shorthand, separated by spaces,
-    commas or hyphens: ``I18 K17 I17 K18 RGD``. ``K70`` means 70 ``VPGKG`` repeats.
+    commas or hyphens: ``I10 K10 I5 KR12 RGD``. ``K10`` means 10 ``VPGKG`` repeats,
+    and named blocks (NAMED_BLOCKS) insert their sequence.
     """
-    lines = [line for line in text.splitlines() if not line.lstrip().startswith(">")]
-    tokens = [t for t in re.split(r"[\s,\-]+", " ".join(lines).upper()) if t]
+    tokens = tokenize(text)
     if not tokens:
         raise SequenceError("Enter a sequence.")
 
@@ -53,7 +108,8 @@ def parse_sequence(text: str) -> str:
         if re.fullmatch(r"[A-Z]0+", token):
             raise SequenceError(f"'{token}' has zero repeats.")
 
-    seq = build_sequence_with_features([(t, t) for t in tokens])["seq"]
+    components = [(f"({NAMED_BLOCKS[t]['seq']})" if t in NAMED_BLOCKS else t, t) for t in tokens]
+    seq = build_sequence_with_features(components)["seq"]
 
     invalid = sorted(set(seq) - AMINO_ACIDS)
     if "Z" in invalid:
@@ -64,7 +120,7 @@ def parse_sequence(text: str) -> str:
     if invalid:
         raise SequenceError(
             f"Not understood: {', '.join(invalid)}. Use the 20 standard amino acids, "
-            "and put spaces between blocks, like 'I18 K17 RGD'."
+            "and put spaces between blocks, like 'I10 K10 RGD'."
         )
     if len(seq) < MIN_RESIDUES:
         raise SequenceError(f"Sequence needs at least {MIN_RESIDUES} residues.")
@@ -116,6 +172,14 @@ def unwrap_chain(xyz: np.ndarray, box: np.ndarray) -> np.ndarray:
     bonds = np.diff(xyz, axis=1)
     bonds -= box[:, None, :] * np.round(bonds / box[:, None, :])
     return np.concatenate([xyz[:, :1], xyz[:, :1] + np.cumsum(bonds, axis=1)], axis=1)
+
+
+def load_chain(dcd: Path, top: Path) -> np.ndarray:
+    """Whole-chain coordinates in nm, shape (frames, beads, 3)."""
+    import mdtraj as md  # slow to import, and the UI server rarely needs it
+
+    traj = md.load(str(dcd), top=str(top))
+    return unwrap_chain(traj.xyz.astype(float), traj.unitcell_lengths.astype(float))
 
 
 def radius_of_gyration(xyz: np.ndarray, masses: np.ndarray) -> np.ndarray:

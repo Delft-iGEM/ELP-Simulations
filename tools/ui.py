@@ -6,6 +6,8 @@ separate process (tools.rg_worker), each in its own folder under runs/.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 import json
 import re
@@ -13,8 +15,10 @@ import secrets
 import subprocess
 import sys
 import threading
+import unicodedata
 from collections import deque
 from datetime import datetime
+from functools import cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -25,13 +29,53 @@ from tools import rg as rg_tools
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = PROJECT_ROOT / "runs"
 PAGE = Path(__file__).with_name("ui.html")
+RACE_SCRIPT = Path(__file__).with_name("race.js")
+# Pictures behind the race chart's Rg regions, served at /images/<name>. A fixed list, so no other file is reachable.
+REGION_IMAGES = {name: PROJECT_ROOT / "Images" / name for name in ("Good_bone.png", "neuron.png", "skin.png")}
+TEAMS_CSV = PROJECT_ROOT / "teams-2026.csv"  # iGEM's 2026 team export
 JOB_ID = re.compile(r"\d{8}-\d{6}(-[a-z0-9-]+)?")
-LIMITS = {"temp_c": (0.0, 100.0), "ionic": (0.01, 2.0), "ph": (1.0, 14.0)}
+# Every run uses the same conditions, so runs compare on sequence alone.
+CONDITIONS = {"temp_c": 20.0, "ionic": 0.13, "ph": 7.5, "preset": "fast"}
+TARGET_RG_LIMITS = (0.5, 30.0)  # nm
 ERROR_TAIL_LINES = 25
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+PNG_DATA_URL = "data:image/png;base64,"
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_BODY_BYTES = 2 * MAX_IMAGE_BYTES  # base64 inflates the image by a third
 
 
 class BadRequest(ValueError):
     pass
+
+
+def team_key(name: str) -> str:
+    """Spelling-insensitive key: 'Ashesi Ghana', 'ashesi-ghana' and 'AshesiGhana' all match.
+
+    The page's teamKey() must do the same.
+    """
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", ascii_name.lower())
+
+
+@cache
+def load_teams() -> list[dict]:
+    """Accepted 2026 teams, sorted by name. Empty if the CSV is missing."""
+    try:
+        with open(TEAMS_CSV, newline="", encoding="utf-8-sig") as f:
+            rows = [r for r in csv.DictReader(f) if r.get("status") == "accepted"]
+    except OSError:
+        return []
+    return sorted(({"name": r["name"], "city": r["city"]} for r in rows), key=lambda t: t["name"].lower())
+
+
+def canonical_team(raw: object) -> str | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    for team in load_teams():
+        if team_key(team["name"]) == team_key(text):
+            return team["name"]
+    raise BadRequest(f"'{text[:40]}' isn't a 2026 iGEM team. Pick one from the list.")
 
 
 def validate_job(body: dict) -> dict:
@@ -40,28 +84,23 @@ def validate_job(body: dict) -> dict:
     except rg_tools.SequenceError as exc:
         raise BadRequest(str(exc)) from exc
 
-    preset = body.get("preset")
-    if preset not in rg_tools.PRESETS:
-        raise BadRequest("Choose a run length.")
-
-    numbers = {}
-    for key, (low, high) in LIMITS.items():
-        try:
-            value = float(body[key])
-        except (KeyError, TypeError, ValueError):
-            raise BadRequest(f"{key} must be a number.") from None
-        if not low <= value <= high:
-            raise BadRequest(f"{key} must be between {low:g} and {high:g}.")
-        numbers[key] = value
+    low, high = TARGET_RG_LIMITS
+    try:
+        target = float(body["target_rg"])
+    except (KeyError, TypeError, ValueError):
+        raise BadRequest("Enter a target Rg in nm.") from None
+    if not low <= target <= high:
+        raise BadRequest(f"Target Rg must be between {low:g} and {high:g} nm.")
 
     return {
         "name": str(body.get("name") or "").strip()[:80],
+        "team": canonical_team(body.get("team")),
         "input": str(body["sequence"]).strip(),
         "sequence": sequence,
-        "preset": preset,
-        "plan": rg_tools.run_plan(len(sequence), preset),
+        "plan": rg_tools.run_plan(len(sequence), CONDITIONS["preset"]),
         "seed": secrets.randbelow(2**31 - 1) + 1,
-        **numbers,
+        "target_rg": target,
+        **CONDITIONS,
     }
 
 
@@ -157,12 +196,17 @@ class JobManager:
         out = {
             "id": job_id,
             "name": job["name"],
+            "team": job.get("team"),  # absent on runs made before teams
+            "input": job["input"],
             "n_residues": len(job["sequence"]),
             "temp_c": job["temp_c"],
             "ionic": job["ionic"],
             "ph": job["ph"],
             "preset": job["preset"],
             "simulated_ns": job["plan"]["simulated_ns"],
+            "has_image": (job_dir / "image.png").exists(),
+            "target_rg": job.get("target_rg"),  # absent on runs made before targets
+            "blocks": rg_tools.analyze_blocks(job["input"]),
         }
         with self.changed:
             active, queued = self.active, list(self.queued)
@@ -191,12 +235,51 @@ class JobManager:
         ]
         return [self.summary(i) for i in sorted(ids, reverse=True)]
 
+    def set_image(self, job_id: str, data_url: str | None) -> None:
+        """Store a run's picture, or remove it when data_url is None.
+
+        The page converts every picture to PNG first, so only PNG is accepted here.
+        """
+        path = self.runs_dir / job_id / "image.png"
+        if data_url is None:
+            path.unlink(missing_ok=True)
+            return
+        if not isinstance(data_url, str) or not data_url.startswith(PNG_DATA_URL):
+            raise BadRequest("Expected a PNG picture.")
+        try:
+            image = base64.b64decode(data_url[len(PNG_DATA_URL) :], validate=True)
+        except binascii.Error:
+            raise BadRequest("That picture couldn't be read.") from None
+        if not image.startswith(PNG_SIGNATURE):
+            raise BadRequest("Expected a PNG picture.")
+        if len(image) > MAX_IMAGE_BYTES:
+            raise BadRequest("That picture is too large.")
+        tmp = path.with_suffix(f".{threading.get_ident()}.tmp")
+        tmp.write_bytes(image)
+        tmp.replace(path)
+
+    def coords(self, job_id: str) -> bytes:
+        """COM-centred chain coordinates as little-endian float32 (frames x beads x 3, nm).
+
+        Cached beside the trajectory after the first request.
+        """
+        job_dir = self.runs_dir / job_id
+        cache = job_dir / "coords.bin"
+        if not cache.exists():
+            job = json.loads((job_dir / "job.json").read_text())
+            xyz = rg_tools.load_chain(job_dir / "elp.dcd", job_dir / "top.pdb")
+            masses = rg_tools.bead_masses(job["sequence"], rg_tools.RESIDUES_CSV)
+            xyz -= np.average(xyz, axis=1, weights=masses)[:, None, :]
+            tmp = job_dir / f"coords.{threading.get_ident()}.tmp"
+            tmp.write_bytes(xyz.astype("<f4").tobytes())
+            tmp.replace(cache)
+        return cache.read_bytes()
+
     def detail(self, job_id: str) -> dict:
         out = self.summary(job_id)
         job_dir = self.runs_dir / job_id
         job = json.loads((job_dir / "job.json").read_text())
         out["sequence"] = job["sequence"]
-        out["input"] = job["input"]
         if out["status"] == "done":
             with open(job_dir / "rg.csv", newline="") as f:
                 rows = list(csv.DictReader(f))
@@ -248,13 +331,50 @@ def make_handler(manager: JobManager, allowed_hosts: set[str]):
             parts = [p for p in self.path.split("?")[0].split("/") if p]
             if not parts:
                 self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+            elif parts == ["race.js"]:
+                self._send(200, RACE_SCRIPT.read_bytes(), "text/javascript; charset=utf-8")
+            elif len(parts) == 2 and parts[0] == "images" and parts[1] in REGION_IMAGES:
+                path = REGION_IMAGES[parts[1]]
+                if path.exists():
+                    self._send(200, path.read_bytes(), "image/png", {"X-Content-Type-Options": "nosniff"})
+                else:
+                    self._json({"error": "No such picture."}, 404)
             elif parts == ["api", "jobs"]:
                 self._json(manager.list_jobs())
-            elif parts == ["api", "presets"]:
-                self._json(rg_tools.PRESETS)
+            elif parts == ["api", "teams"]:
+                self._json(load_teams())
+            elif parts == ["api", "settings"]:
+                preset = CONDITIONS["preset"]
+                self._json({
+                    **CONDITIONS,
+                    "preset_label": rg_tools.PRESETS[preset]["label"],
+                    "target_rg_limits": TARGET_RG_LIMITS,
+                    "elp_guests": rg_tools.ELP_GUESTS,
+                    "elp_repeats": rg_tools.ELP_REPEATS,
+                    "named_blocks": rg_tools.NAMED_BLOCKS,
+                    "block_aliases": rg_tools.BLOCK_ALIASES,
+                })
             elif len(parts) == 3 and parts[:2] == ["api", "jobs"]:
                 if job_id := self._job_id(parts[2]):
                     self._json(manager.detail(job_id))
+            elif len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "image":
+                if job_id := self._job_id(parts[2]):
+                    path = manager.runs_dir / job_id / "image.png"
+                    if path.exists():
+                        self._send(
+                            200,
+                            path.read_bytes(),
+                            "image/png",
+                            {"X-Content-Type-Options": "nosniff"},
+                        )
+                    else:
+                        self._json({"error": "No picture for this run."}, 404)
+            elif len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "coords":
+                if job_id := self._job_id(parts[2]):
+                    try:
+                        self._send(200, manager.coords(job_id), "application/octet-stream")
+                    except OSError:
+                        self._json({"error": "No trajectory for this run."}, 404)
             elif len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "rg.csv":
                 if job_id := self._job_id(parts[2]):
                     path = manager.runs_dir / job_id / "rg.csv"
@@ -281,6 +401,9 @@ def make_handler(manager: JobManager, allowed_hosts: set[str]):
             parts = [p for p in self.path.split("/") if p]
             try:
                 length = int(self.headers.get("Content-Length", 0))
+                if length > MAX_BODY_BYTES:
+                    self._json({"error": "That picture is too large."}, 413)
+                    return
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(body, dict):
                     raise ValueError
@@ -294,13 +417,21 @@ def make_handler(manager: JobManager, allowed_hosts: set[str]):
                 except rg_tools.SequenceError as exc:
                     self._json({"error": str(exc)})
                     return
-                plans = {p: rg_tools.run_plan(len(seq), p) for p in rg_tools.PRESETS}
-                self._json({"sequence": seq, "n_residues": len(seq), "plans": plans})
+                plan = rg_tools.run_plan(len(seq), CONDITIONS["preset"])
+                blocks = rg_tools.analyze_blocks(str(body.get("sequence", "")))
+                self._json({"sequence": seq, "n_residues": len(seq), "plan": plan, "blocks": blocks})
             elif parts == ["api", "jobs"]:
                 try:
                     self._json({"id": manager.submit(validate_job(body))}, 201)
                 except BadRequest as exc:
                     self._json({"error": str(exc)}, 400)
+            elif len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "image":
+                if job_id := self._job_id(parts[2]):
+                    try:
+                        manager.set_image(job_id, body.get("data"))
+                        self._json({"ok": True})
+                    except BadRequest as exc:
+                        self._json({"error": str(exc)}, 400)
             elif len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "cancel":
                 if job_id := self._job_id(parts[2]):
                     manager.cancel(job_id)

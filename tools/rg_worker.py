@@ -13,7 +13,6 @@ import os
 import sys
 from pathlib import Path
 
-import mdtraj as md
 import openmm
 from calvados.cfg import Components, Config
 from calvados.sim import Sim
@@ -22,8 +21,6 @@ from yaml import safe_load
 from tools import rg as rg_tools
 
 SYSNAME = "elp"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESIDUES_CSV = PROJECT_ROOT / "residues_CALVADOS2.csv"
 
 
 def pick_platform() -> str:
@@ -68,7 +65,7 @@ def simulate(job_dir: Path, job: dict, platform: str) -> None:
         nmol=1,
         restraint=False,
         charge_termini="both",
-        fresidues=str(RESIDUES_CSV),
+        fresidues=str(rg_tools.RESIDUES_CSV),
         ffasta=str(job_dir / "molecules.fasta"),
     )
     components.add(name=SYSNAME)
@@ -82,9 +79,8 @@ def simulate(job_dir: Path, job: dict, platform: str) -> None:
 
 
 def analyze(job_dir: Path, job: dict, platform: str) -> None:
-    traj = md.load(str(job_dir / f"{SYSNAME}.dcd"), top=str(job_dir / "top.pdb"))
-    xyz = rg_tools.unwrap_chain(traj.xyz.astype(float), traj.unitcell_lengths.astype(float))
-    rg = rg_tools.radius_of_gyration(xyz, rg_tools.bead_masses(job["sequence"], RESIDUES_CSV))
+    xyz = rg_tools.load_chain(job_dir / f"{SYSNAME}.dcd", job_dir / "top.pdb")
+    rg = rg_tools.radius_of_gyration(xyz, rg_tools.bead_masses(job["sequence"], rg_tools.RESIDUES_CSV))
 
     summary = rg_tools.summarize(rg)
     frame_ns = job["plan"]["wfreq"] * rg_tools.TIMESTEP_PS / 1000

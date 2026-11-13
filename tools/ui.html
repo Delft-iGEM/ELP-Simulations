@@ -3,49 +3,131 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ELP radius of gyration</title>
+<title>Radius of gyration - TU Delft iGEM 2026</title>
+<link rel="shortcut icon" href="https://static.igem.wiki/teams/6110/wiki/logo/favicon.avif">
 <style>
+/* Fonts, colours and pictures follow the TU Delft 2026 wiki (src/styles.css and src/theme.ts there). */
+@font-face { font-family: 'Poppins'; font-weight: 400; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/poppins/poppins-regular.ttf') format('truetype'); }
+@font-face { font-family: 'Poppins'; font-weight: 500; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/poppins/poppins-medium.ttf') format('truetype'); }
+@font-face { font-family: 'Poppins'; font-weight: 600; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/poppins/poppins-semibold.ttf') format('truetype'); }
+@font-face { font-family: 'Poppins'; font-weight: 700; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/poppins/poppins-bold.ttf') format('truetype'); }
+@font-face { font-family: 'Fredoka'; font-weight: 400; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/fredoka/fredoka-regular.ttf') format('truetype'); }
+@font-face { font-family: 'Fredoka'; font-weight: 500; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/fredoka/fredoka-medium.ttf') format('truetype'); }
+@font-face { font-family: 'Fredoka'; font-weight: 600; font-display: swap; src: url('https://static.igem.wiki/teams/6110/wiki/fonts/fredoka/fredoka-semibold.ttf') format('truetype'); }
 :root {
   color-scheme: light;
-  --bg: #f5f5f3; --surface: #fcfcfb; --line: #e4e3df; --grid: #ecebe7;
-  --text: #0b0b0b; --text-2: #52514e; --text-3: #6f6e69;
-  --series: #2a78d6; --muted-series: #a8a7a1; --band: #f0efeb;
-  --accent: #2a78d6; --accent-ink: #fff; --warn: #8a5a00; --warn-bg: #fdf4e0;
-  --bad: #b3261e; --bad-bg: #fcebea;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #121211; --surface: #1a1a19; --line: #33332f; --grid: #2a2a27;
-    --text: #f0efec; --text-2: #c3c2b7; --text-3: #9a998f;
-    --series: #3987e5; --muted-series: #6a6962; --band: #232321;
-    --accent: #3987e5; --accent-ink: #fff; --warn: #f0c060; --warn-bg: #33290f;
-    --bad: #f2a29c; --bad-bg: #3a1a18;
-  }
+  --heading: 'Fredoka', 'Helvetica', 'Arial', sans-serif;
+  --bg: #fffaf0; --surface: #ffffff; --field: #fffdf8; --line: #e9e1cf; --grid: #f0eadd;
+  --text: #1c1b18; --text-2: #4d4b45; --text-3: #6f6c63;
+  --series: #1f6bff; --muted-series: #a8a59b; --band: #f6f0e3;
+  --accent: #1a5fe6; --accent-dark: #124ab8; --accent-ink: #fff; --link: #0d50a2; --navy: #011d59;
+  --warn: #8a5a00; --warn-bg: #fff3d6;
+  --bad: #b3261e; --bad-bg: #fdecea;
+  --brand-gradient: linear-gradient(131deg, #1f6bff 0%, #f24d10 100%);
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 60px; }
-h1 { font-size: 22px; margin: 0 0 20px; font-weight: 650; }
-h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-.layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column;
+  font: 15px/1.5 'Poppins', 'Helvetica', 'Arial', sans-serif; }
+main { width: 100%; max-width: 1240px; margin: 0 auto; padding: 36px 24px 64px; flex: 1; }
+h1, h2 { font-family: var(--heading); }
+h1 { font-size: clamp(38px, 5vw, 52px); line-height: 1.1; margin: 0; font-weight: 500; color: #fff; }
+h2 { font-size: 22px; line-height: 1.2; margin: 0 0 14px; font-weight: 500; }
+.banner { position: relative; overflow: hidden; color: #fff; background: var(--brand-gradient); }
+.banner canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.banner::after { content: ""; position: absolute; inset: 0; background: #011d596d; }
+.banner-inner { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; padding: 16px 24px 84px; }
+.topnav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 44px; }
+.topnav img { display: block; height: 32px; }
+.topnav a { color: #fff; text-decoration: none; font-size: 16px; padding: 7px 16px; border-radius: 6px; transition: background-color .2s ease-out; }
+.topnav a:hover { background: rgba(255,255,255,.12); }
+.banner p { margin: 10px 0 0; max-width: 720px; color: rgba(255,255,255,.85); font-size: 16px; }
+.tile-strip { position: absolute; z-index: 2; left: 0; bottom: 0; display: flex; pointer-events: none; }
+.tile-strip i { flex: none; width: 35px; height: 35px; background: #fff; opacity: .4; transition: opacity .7s ease-in-out; -webkit-mask-size: cover; mask-size: cover; }
+body.racing .banner-inner { padding-bottom: 58px; }
+body.racing .topnav { margin-bottom: 16px; }
+body.racing .banner p { display: none; }
+body.racing h1 { font-size: 34px; }
+.site-footer { background: var(--navy); color: #fff; }
+.colour-strip { display: flex; height: 6px; }
+.colour-strip i { flex: 1; }
+.footer-inner { max-width: 1240px; margin: 0 auto; padding: 32px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 40px; }
+.footer-logos { display: flex; align-items: center; gap: 12px; font-size: 14px; color: rgba(255,255,255,.6); }
+.footer-logos img { display: block; height: 40px; }
+.footer-text { max-width: 440px; margin: 0; font-size: 14px; line-height: 1.7; color: rgba(255,255,255,.75); }
+.footer-tiles { display: flex; gap: 6px; }
+.footer-tiles img { display: block; width: 28px; height: 28px; transition: transform .2s ease-out; }
+.footer-tiles img:hover { transform: translateY(-4px) rotate(-6deg); }
+.heading-tile { width: 26px; height: 26px; }
+.card-title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.card-title h2 { margin: 0; }
+.layout { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 24px; align-items: start; }
 @media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-  padding: 18px; margin-bottom: 20px; }
-label { display: block; font-size: 13px; font-weight: 550; color: var(--text-2); margin-bottom: 4px; }
-input, textarea, select { width: 100%; font: inherit; color: var(--text); background: var(--bg);
-  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 22px; margin-bottom: 24px; box-shadow: 0 2px 10px rgba(1,29,89,.05); }
+label { display: block; font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 4px; }
+input, textarea, select { width: 100%; font: inherit; color: var(--text); background: var(--field);
+  border: 1px solid #d9d0bb; border-radius: 6px; padding: 7px 9px; }
 textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
 .field { margin-bottom: 14px; }
-.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.label { display: block; font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 4px; }
+/* Block builder: glassy tiles in the wiki's style. Each tile sets --c, its colour. */
+.builder { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--field); }
+.pal-group { margin-bottom: 8px; }
+.pal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.pal-tiles { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.repeats { display: flex; gap: 2px; background: var(--band); border-radius: 6px; padding: 2px; }
+.repeats button { padding: 1px 8px; font-size: 12px; border: 0; border-radius: 4px; }
+.repeats button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+/* Tiles follow the wiki's block art (Images/V × 1.png): a flat rounded square in the block's colour,
+   a navy letter, and the repeat count outside its lower right corner in a deeper shade. */
+button.tile { display: inline-flex; align-items: flex-end; padding: 0 2px 6px 0; border: 0; border-radius: 0; background: none;
+  color: #081c55; font-family: var(--heading); font-weight: 600; cursor: grab; user-select: none; transition: transform .15s ease-out; }
+button.tile:hover:not(:disabled) { background: none; transform: translateY(-2px); }
+button.tile:focus-visible { outline: none; }
+button.tile:focus-visible .sq { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile .sq { display: flex; align-items: center; justify-content: center; min-width: 38px; height: 38px; padding: 0 8px;
+  border-radius: 7px; background: var(--c); font-size: 19px; line-height: 1; letter-spacing: .01em; }
+.tile .sq.long { font-size: 14px; }
+.tile .n { margin: 0 0 -6px 2px; color: var(--d); font-size: 16px; line-height: 1; font-variant-numeric: tabular-nums; }
+.tile .n.word { font-size: 11px; margin-bottom: -4px; }
+.track .tile .sq { min-width: 46px; height: 46px; font-size: 22px; border-radius: 9px; }
+.track .tile .sq.long { font-size: 16px; }
+.track .tile .n { font-size: 18px; }
+.track .tile .n.word { font-size: 12px; }
+.track-head { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--text-3); margin: 10px 0 4px; }
+.track-head button { padding: 2px 8px; font-size: 12px; font-weight: 500; }
+.track { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px 8px; min-height: 64px; padding: 6px; border-radius: 8px; background: var(--band); }
+.track.over { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.track .placeholder { align-self: center; margin: auto; font-size: 13px; color: var(--text-3); }
+.track .tile.dragging { opacity: .35; }
+.track .tile { position: relative; }
+.track .tile.drop-before::before, .track .tile.drop-after::after { content: ""; position: absolute; top: 0; bottom: 6px; width: 3px; border-radius: 2px; background: var(--accent); }
+.track .tile.drop-before::before { left: -6px; }
+.track .tile.drop-after::after { right: -6px; }
+.score { background: var(--band); border-radius: 8px; padding: 10px 14px; margin: 4px 0 12px; }
+.score b { display: block; font-family: var(--heading); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.score span { font-size: 13px; color: var(--text-2); }
+.combo { position: relative; }
+.suggest { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; list-style: none; margin: 3px 0 0; padding: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(1,29,89,.12);
+  max-height: 264px; overflow-y: auto; }
+.suggest li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 6px 8px; border-radius: 5px; cursor: pointer; font-size: 14px; }
+.suggest li small { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggest li:hover, .suggest li[aria-selected="true"] { background: var(--band); }
+.locked { display: inline-block; background: var(--band); border-radius: 6px; padding: 6px 10px; font-size: 13.5px; color: var(--text-2); margin: 0 0 12px; }
 .hint { font-size: 13px; color: var(--text-3); margin-top: 5px; min-height: 19px; overflow-wrap: anywhere; }
 .hint.err { color: var(--bad); }
 button { font: inherit; font-weight: 600; border-radius: 6px; padding: 8px 14px; cursor: pointer;
   border: 1px solid var(--line); background: transparent; color: var(--text); }
+button { transition: background-color .2s ease-out, transform .2s ease-out; }
+button:hover:not(:disabled) { background-color: rgba(1,29,89,.06); }
 button.primary { width: 100%; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button:disabled { opacity: .5; cursor: not-allowed; }
-.jobs { list-style: none; margin: 0; padding: 0; }
+/* Keeps a run's results in view when it's clicked further down the page. */
+@media (min-width: 861px) { #detail { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; } }
+.jobs { list-style: none; margin: 0; padding: 0; max-height: 520px; overflow-y: auto; }
 .jobs button { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left;
   font-weight: 400; border: 0; border-radius: 6px; padding: 8px; }
 .jobs button:hover { background: var(--band); }
@@ -54,7 +136,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .jobs .val { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
 .jobs .state { white-space: nowrap; font-size: 13px; color: var(--text-2); }
 .empty { color: var(--text-3); }
-.hero { font-size: 44px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hero { font-family: var(--heading); font-size: 52px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .hero small { font-size: 20px; font-weight: 500; color: var(--text-2); }
 .title { overflow-wrap: anywhere; }
 .meta { color: var(--text-2); font-size: 13.5px; margin: 4px 0 14px; }
@@ -76,52 +158,151 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 8
 #tip b { font-variant-numeric: tabular-nums; }
 #tip span { display: block; color: var(--text-3); font-size: 12px; }
 .actions { display: flex; gap: 14px; align-items: center; margin-top: 12px; font-size: 14px; }
-a { color: var(--accent); }
+a { color: var(--link); font-weight: 500; text-decoration-color: rgba(13,80,162,.37); }
+.site-footer a, .topnav a { font-weight: 400; }
 details { font-size: 13px; color: var(--text-2); margin-top: 12px; }
 details code { display: block; margin-top: 6px; overflow-wrap: anywhere; font-size: 12px; }
+.runs-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.runs-head h2 { margin: 0; }
+.runs-actions { display: flex; gap: 8px; }
+.runs-actions button { padding: 6px 10px; font-size: 13.5px; white-space: nowrap; }
+.picture { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.picture img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; background: var(--band); flex: none; }
+.picture .buttons { display: flex; gap: 8px; margin-top: 6px; }
+.picture button { padding: 5px 10px; font-size: 13px; }
+.picture .hint { margin-top: 0; min-height: 0; }
+.jobs li { display: flex; align-items: center; gap: 4px; }
+.jobs li > button { flex: 1; min-width: 0; }
+.jobs input[type=checkbox] { width: 16px; height: 16px; flex: none; margin: 0 4px; accent-color: var(--accent); }
+.jobs .no-check { width: 24px; flex: none; }
+body.racing main { max-width: 1560px; padding-top: 24px; }
+body.racing .layout { display: none; }
+.race-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+button.race-play { width: auto; min-width: 110px; }
+.race-length { width: auto; }
+.race-goal { width: 150px; }
+.race-scrub { flex: 1; min-width: 160px; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+.race-clock { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--text-2); min-width: 110px; text-align: right; }
+.race-banner { font-family: var(--heading); font-size: 20px; font-weight: 500; color: #fff; background: var(--brand-gradient); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px; }
+.race-track { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1000px) { .race-track { grid-template-columns: minmax(0, 1fr); } }
+.race-chart-card { margin: 0; }
+.race-chart { position: relative; }
+.race-chart svg { display: block; width: 100%; touch-action: pan-y; }
+.race-tip { position: absolute; display: none; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 13px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12); font-variant-numeric: tabular-nums; }
+.race-tip-time { display: block; color: var(--text-3); font-size: 12px; }
+.race-tip-key { display: inline-block; width: 12px; height: 2px; margin-right: 6px; vertical-align: middle; }
+.race-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.race-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; min-width: 0; }
+.race-card.leading { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.race-card header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.race-card canvas { display: block; }
+.race-rank { font-family: var(--heading); font-weight: 600; font-size: 15px; min-width: 28px; font-variant-numeric: tabular-nums; }
+.race-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.race-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.race-value { display: block; font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.race-meta { margin: 2px 0 0; font-size: 12px; color: var(--text-3); }
+.race-winner { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; background: rgba(1,29,89,.82); cursor: pointer; animation: winner-fade .35s ease-out; }
+.race-winner img { width: 80vw; height: 68vh; object-fit: contain; border-radius: 12px; animation: winner-grow .6s cubic-bezier(.2,1.3,.4,1); }
+.race-winner div { font-family: var(--heading); background: var(--surface); border-radius: 10px; padding: 12px 18px; text-align: center; font-size: 22px; font-weight: 500; max-width: 80vw; }
+.race-winner small { display: block; font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 400; color: var(--text-3); margin-top: 4px; }
+@keyframes winner-fade { from { opacity: 0; } }
+@keyframes winner-grow { from { transform: scale(.2); } }
+@media (prefers-reduced-motion: reduce) { .race-winner, .race-winner img { animation: none; } }
 </style>
 </head>
 <body>
+<header class="banner">
+  <canvas id="blobs" aria-hidden="true"></canvas>
+  <div class="banner-inner">
+    <nav class="topnav">
+      <a href="https://2026.igem.wiki/tu-delft/" aria-label="TU Delft iGEM wiki" style="padding: 0"><img src="https://static.igem.wiki/teams/6110/wiki/logo/logo-white.avif" alt="TU Delft iGEM"></a>
+      <a href="https://2026.igem.wiki/tu-delft/">Wiki</a>
+    </nav>
+    <h1>Radius of gyration</h1>
+    <p>Design an ELP sequence, simulate it on this computer and see how far the chain spreads. Then race it against the others.</p>
+  </div>
+  <div class="tile-strip" id="tileStrip" aria-hidden="true"></div>
+</header>
 <main>
-<h1>ELP radius of gyration</h1>
 <div class="layout">
   <div>
     <form class="card" id="form">
+      <div class="card-title"><img class="heading-tile" src="https://static.igem.wiki/teams/6110/wiki/logo/tiles/m.avif" alt=""><h2>New simulation</h2></div>
       <div class="field">
-        <label for="sequence">Sequence</label>
-        <textarea id="sequence" rows="5" spellcheck="false" required
-          placeholder="I18 K17 I17 K18 RGD"></textarea>
-        <div class="hint" id="parsed">Use blocks or a raw sequence. K70 means 70 VPGKG repeats.</div>
+        <span class="label" id="builderLabel">Build your ELP</span>
+        <div class="builder" id="builder" role="group" aria-labelledby="builderLabel">
+          <div id="palette"></div>
+          <div class="track-head"><span id="trackInfo">Your construct</span><button type="button" id="clearTrack">Clear</button></div>
+          <div class="track" id="track"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="sequence">Sequence (or type it)</label>
+        <textarea id="sequence" rows="2" spellcheck="false" required
+          placeholder="I10 K10 I5 KR12 IKVAV"></textarea>
+        <div class="hint" id="parsed"></div>
       </div>
       <div class="field">
         <label for="name">Name (optional)</label>
         <input id="name" maxlength="80" autocomplete="off">
       </div>
-      <div class="row field">
-        <div><label for="temp">Temp (°C)</label><input id="temp" type="number" step="any" min="0" max="100" value="20" required></div>
-        <div><label for="ionic">Ionic str. (M)</label><input id="ionic" type="number" step="any" min="0.01" max="2" value="0.13" required></div>
-        <div><label for="ph">pH</label><input id="ph" type="number" step="any" min="1" max="14" value="7.5" required></div>
+      <div class="field">
+        <label for="team">Team (optional)</label>
+        <div class="combo">
+          <input id="team" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="teamList"
+            autocomplete="off" spellcheck="false" placeholder="Start typing, e.g. TU Delft">
+          <ul class="suggest" id="teamList" role="listbox" aria-label="2026 iGEM teams" hidden></ul>
+        </div>
+        <div class="hint" id="teamHint"></div>
       </div>
       <div class="field">
-        <label for="preset">Run length</label>
-        <select id="preset"></select>
+        <label for="target">Target Rg (nm)</label>
+        <input id="target" type="number" step="any" inputmode="decimal" required>
+        <div class="hint" id="targetHint">Bone below 4 nm · Skin 4–5 nm · Brain 5 nm and up</div>
       </div>
+      <p class="meta" id="conditions"></p>
       <button class="primary" id="run" type="submit">Run simulation</button>
       <div class="hint err" id="formError" role="alert"></div>
     </form>
     <section class="card">
-      <h2>Runs</h2>
+      <div class="runs-head">
+        <div class="card-title" style="margin: 0"><img class="heading-tile" src="https://static.igem.wiki/teams/6110/wiki/logo/tiles/o.avif" alt=""><h2>Runs</h2></div>
+        <div class="runs-actions">
+          <button type="button" id="scoresBtn"></button>
+          <button type="button" id="raceBtn" disabled>Race selected</button>
+        </div>
+      </div>
       <ul class="jobs" id="jobs"></ul>
+      <div class="hint" id="raceHint">Tick 2 or more finished runs to race them.</div>
     </section>
   </div>
   <section class="card" id="detail" aria-live="polite">
     <p class="empty">Enter a sequence and run it. The result appears here.</p>
   </section>
 </div>
+<section id="race" hidden></section>
 </main>
+<footer class="site-footer">
+  <div class="colour-strip" aria-hidden="true">
+    <i style="background:#FFC711"></i><i style="background:#3EC900"></i><i style="background:#FF8C00"></i><i style="background:#FF273D"></i><i style="background:#B868D8"></i><i style="background:#657CE3"></i>
+  </div>
+  <div class="footer-inner">
+    <div class="footer-logos">
+      <img src="https://static.igem.wiki/teams/6110/wiki/logo/logo-white.avif" alt="MOSAIC">
+      by
+      <img src="https://static.igem.wiki/teams/6110/wiki/logo/igem-tud.avif" alt="iGEM TU Delft">
+    </div>
+    <p class="footer-text">Modular protein coatings that let implants be personalised to each patient's needs.</p>
+    <div class="footer-tiles" id="footerTiles" aria-hidden="true"></div>
+  </div>
+</footer>
 <script>
 const $ = id => document.getElementById(id);
-let presets = {}, selected = null, shownKey = null, lastPlans = null, chartData = null;
+let settings = null, selected = null, shownKey = null, chartData = null;
+const raceSet = new Set();
+let jobsSignature = '';
+let scoresHidden = localStorage.getItem('scoresHidden') === '1';
 
 function el(tag, props = {}, ...kids) {
   const n = Object.assign(document.createElement(tag), props);
@@ -149,19 +330,182 @@ function fmtDuration(s) {
   if (s < 5400) return 'about ' + Math.round(s / 60) + ' min left';
   return 'about ' + (s / 3600).toFixed(1) + ' h left';
 }
-const jobTitle = j => j.name || `${j.n_residues} residues`;
-const jobMeta = j => `${j.n_residues} residues · ${j.temp_c} °C · ${j.ionic} M · pH ${j.ph}`;
+const TITLE_MAX = 28;
+const jobTitle = j => j.name || (j.input.length > TITLE_MAX ? j.input.slice(0, TITLE_MAX - 1) + '…' : j.input);
+const fmtTarget = j => (j.target_rg == null ? 'no target' : `target ${j.target_rg} nm`);
+const teamPart = j => (j.team ? `${j.team} · ` : '');
+const jobMeta = j => `${teamPart(j)}${j.n_residues} residues · ${fmtTarget(j)} · ${j.temp_c} °C · ${j.ionic} M · pH ${j.ph}`;
 
 /* Form */
-function renderPresetOptions() {
-  const current = $('preset').value || 'fast';
-  $('preset').replaceChildren(...Object.entries(presets).map(([key, p]) => {
-    const plan = lastPlans && lastPlans[key];
-    const suffix = plan ? ` (${fmtNs(plan.simulated_ns)} ns simulated)` : ` (${p.frames} frames)`;
-    return el('option', {value: key, textContent: p.label + suffix});
-  }));
-  $('preset').value = current;
+const BLOCK_HINT = 'Click or drag blocks into your construct, or type them separated by spaces. K10 means 10 VPGKG repeats.';
+function renderSettings() {
+  const s = settings;
+  $('conditions').replaceChildren(el('span', {className: 'locked',
+    textContent: `Fixed for every run: ${s.temp_c} °C · ${s.ionic} M · pH ${s.ph} · ${s.preset_label} run`}));
+  const [lo, hi] = s.target_rg_limits;
+  Object.assign($('target'), {min: lo, max: hi});
+  $('parsed').textContent = BLOCK_HINT;
+  renderPalette();
+  renderTrack();
 }
+
+/* Block builder. The text box is the source of truth: the strip is drawn from its tokens,
+   and every edit in the strip rewrites the text box. */
+// [tile, count] colours. V is taken from the wiki art; the rest are its siblings, light enough for the navy letter.
+const BLOCK_COLORS = {
+  V: ['#f6c947', '#d9a400'], I: ['#8fb2f5', '#3d6fd9'], A: ['#ddd2b4', '#a08c5a'], F: ['#bda3ec', '#7f55c9'],
+  W: ['#a69be6', '#5e4fc4'], C: ['#93d8d1', '#2a9a90'], K: ['#ffad62', '#e07800'], E: ['#ff9198', '#d93a45'],
+  Q: ['#9edc87', '#3f9f2a'], KR12: ['#f3a4d4', '#c9479a'], SAAP: ['#e3a0f0', '#a84bbf'],
+  RGD: ['#e9d6a6', '#b08f40'], IKVAV: ['#f8bd9f', '#d46f3d'], XBBXBX: ['#f3a6bd', '#c94870']};
+const OTHER_COLOR = ['#dcd6c8', '#958d7c'];
+const KIND_TITLE = {amp: 'Antimicrobial', adhesion: 'Cell adhesion'};
+let elpRepeat = 10, dragging = null, dropAt = null;
+
+function textTokens() {
+  const text = $('sequence').value.split('\n').filter(l => !l.trimStart().startsWith('>')).join(' ');
+  return text.toUpperCase().split(/[\s,\-]+/).filter(Boolean);
+}
+function blockInfo(token) {
+  const name = settings.block_aliases[token] || token, named = settings.named_blocks[name];
+  // Adhesion domains carry their tissue where an ELP block carries its repeat count.
+  if (named) return {label: name, count: named.tissue ? named.tissue.toLowerCase() : '', color: BLOCK_COLORS[name], len: named.seq.length};
+  const m = /^([A-Z])(\d+)$/.exec(token);
+  if (m) {
+    const listed = settings.elp_guests.includes(m[1]) && settings.elp_repeats.includes(+m[2]);
+    return {label: m[1], count: m[2], color: listed ? BLOCK_COLORS[m[1]] : OTHER_COLOR, len: 5 * m[2]};
+  }
+  return {label: token.length > 8 ? token.slice(0, 7) + '…' : token, count: '', color: OTHER_COLOR, len: token.length};
+}
+function tile(token, title) {
+  const info = blockInfo(token);
+  const sq = el('span', {className: info.label.length > 3 ? 'sq long' : 'sq', textContent: info.label});
+  const count = el('span', {className: /^\d+$/.test(info.count) ? 'n' : 'n word', textContent: info.count});
+  const b = el('button', {type: 'button', className: 'tile', draggable: true, title}, sq, count);
+  b.style.setProperty('--c', info.color[0]);
+  b.style.setProperty('--d', info.color[1]);
+  return b;
+}
+function setTokens(tokens, focusIndex) {
+  $('sequence').value = tokens.join(' ');
+  renderTrack(focusIndex);
+  onSequenceInput();
+}
+function addBlock(token) { setTokens([...textTokens(), token]); }
+
+function renderPalette() {
+  const s = settings;
+  const paletteTile = token => {
+    const b = tile(token, `Add ${token}`);
+    b.addEventListener('click', () => addBlock(token));
+    b.addEventListener('dragstart', e => { dragging = {token}; e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', token); });
+    b.addEventListener('dragend', endDrag);
+    return b;
+  };
+  const repeats = el('div', {className: 'repeats'}, ...s.elp_repeats.map(n => {
+    const b = el('button', {type: 'button', textContent: `×${n}`});
+    b.setAttribute('aria-pressed', n === elpRepeat);
+    b.setAttribute('aria-label', `${n} repeats per ELP block`);
+    b.addEventListener('click', () => { elpRepeat = n; renderPalette(); });
+    return b;
+  }));
+  const group = (title, extra, tokens) => el('div', {className: 'pal-group'},
+    el('div', {className: 'pal-head'}, el('span', {textContent: title}), extra || ''),
+    el('div', {className: 'pal-tiles'}, ...tokens.map(paletteTile)));
+  const named = kind => Object.keys(s.named_blocks).filter(n => s.named_blocks[n].kind === kind);
+  $('palette').replaceChildren(
+    group('ELP blocks', repeats, [...s.elp_guests].map(g => g + elpRepeat)),
+    ...Object.entries(KIND_TITLE).map(([kind, title]) => group(title, null, named(kind))));
+}
+
+function renderTrack(focusIndex) {
+  if (!settings) return;
+  const tokens = textTokens(), track = $('track');
+  const residues = tokens.reduce((sum, t) => sum + blockInfo(t).len, 0);
+  $('trackInfo').textContent = tokens.length
+    ? `Your construct · ${tokens.length} block${tokens.length === 1 ? '' : 's'}, ${residues} residues` : 'Your construct';
+  $('clearTrack').hidden = !tokens.length;
+  if (!tokens.length) {
+    track.replaceChildren(el('span', {className: 'placeholder', textContent: 'Click or drag blocks here'}));
+    return;
+  }
+  track.replaceChildren(...tokens.map((token, i) => {
+    const b = tile(token, `${token}: click or press Delete to remove, drag or use the arrow keys to move`);
+    b.dataset.index = i;
+    b.addEventListener('click', () => { tokens.splice(i, 1); setTokens(tokens, Math.min(i, tokens.length - 1)); });
+    b.addEventListener('keydown', e => {
+      const move = {ArrowLeft: -1, ArrowRight: 1}[e.key];
+      if (move && i + move >= 0 && i + move < tokens.length) {
+        e.preventDefault();
+        [tokens[i], tokens[i + move]] = [tokens[i + move], tokens[i]];
+        setTokens(tokens, i + move);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        tokens.splice(i, 1);
+        setTokens(tokens, Math.min(i, tokens.length - 1));
+      }
+    });
+    b.addEventListener('dragstart', e => {
+      dragging = {index: i};
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', token);
+      requestAnimationFrame(() => b.classList.add('dragging'));
+    });
+    b.addEventListener('dragend', e => {
+      // Dropped outside the strip: take the block out.
+      const removed = dragging && dragging.index !== undefined && e.dataTransfer.dropEffect === 'none';
+      endDrag();
+      if (removed) { tokens.splice(i, 1); setTokens(tokens); }
+    });
+    return b;
+  }));
+  if (focusIndex !== undefined && focusIndex >= 0) track.children[focusIndex].focus();
+}
+function clearMarkers() {
+  for (const n of $('track').querySelectorAll('.drop-before, .drop-after')) n.classList.remove('drop-before', 'drop-after');
+}
+function endDrag() {
+  dragging = null; dropAt = null;
+  clearMarkers();
+  $('track').classList.remove('over');
+  for (const n of $('track').querySelectorAll('.dragging')) n.classList.remove('dragging');
+}
+$('track').addEventListener('dragover', e => {
+  if (!dragging) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = dragging.index === undefined ? 'copy' : 'move';
+  $('track').classList.add('over');
+  clearMarkers();
+  const over = e.target.closest('.tile');
+  if (over) {
+    const r = over.getBoundingClientRect(), before = e.clientX < r.left + r.width / 2;
+    over.classList.add(before ? 'drop-before' : 'drop-after');
+    dropAt = +over.dataset.index + (before ? 0 : 1);
+  } else {
+    dropAt = textTokens().length;
+  }
+});
+$('track').addEventListener('dragleave', e => {
+  if (!$('track').contains(e.relatedTarget)) { clearMarkers(); $('track').classList.remove('over'); }
+});
+$('track').addEventListener('drop', e => {
+  if (!dragging) return;
+  e.preventDefault();
+  const tokens = textTokens();
+  let at = dropAt ?? tokens.length, token = dragging.token;
+  if (dragging.index !== undefined) {
+    token = tokens.splice(dragging.index, 1)[0];
+    if (at > dragging.index) at--;
+  }
+  tokens.splice(at, 0, token);
+  dragging = null; // so dragend doesn't treat it as dropped outside
+  endDrag();
+  setTokens(tokens);
+});
+// A tile dropped on the text box would paste its name there; treat it as dropped outside instead.
+$('sequence').addEventListener('drop', e => { if (dragging) e.preventDefault(); });
+$('clearTrack').addEventListener('click', () => setTokens([]));
+$('sequence').addEventListener('input', () => renderTrack());
+
 let parseTimer, parseCount = 0;
 function onSequenceInput() {
   clearTimeout(parseTimer);
@@ -170,23 +514,19 @@ function onSequenceInput() {
     const mine = ++parseCount;
     if (!text.trim()) {
       hint.className = 'hint';
-      hint.textContent = 'Use blocks or a raw sequence. K70 means 70 VPGKG repeats.';
-      lastPlans = null; renderPresetOptions();
+      hint.textContent = BLOCK_HINT;
       return;
     }
     const r = await api('/api/parse', {sequence: text});
     if (mine !== parseCount) return;
     if (r.error) {
       hint.className = 'hint err'; hint.textContent = r.error;
-      lastPlans = null;
-    } else {
-      hint.className = 'hint';
-      const s = r.sequence;
-      const shown = s.length > 44 ? s.slice(0, 20) + '…' + s.slice(-20) : s;
-      hint.textContent = `${r.n_residues} residues: ${shown}`;
-      lastPlans = r.plans;
+      return;
     }
-    renderPresetOptions();
+    hint.className = 'hint';
+    let msg = `${r.n_residues} residues, ${fmtNs(r.plan.simulated_ns)} ns simulated`;
+    if (r.blocks.unscored.length) msg += ` · not a listed block: ${r.blocks.unscored.join(', ')}`;
+    hint.textContent = msg;
   }, 200);
 }
 $('sequence').addEventListener('input', onSequenceInput);
@@ -195,9 +535,9 @@ $('form').addEventListener('submit', async e => {
   $('formError').textContent = '';
   $('run').disabled = true;
   try {
+    if (!autocorrectTeam()) throw new Error("That team isn't on the 2026 iGEM list. Pick one from the suggestions.");
     const {id} = await api('/api/jobs', {
-      sequence: $('sequence').value, name: $('name').value, preset: $('preset').value,
-      temp_c: $('temp').value, ionic: $('ionic').value, ph: $('ph').value});
+      sequence: $('sequence').value, name: $('name').value, team: $('team').value, target_rg: $('target').value});
     selected = id; shownKey = null;
     await refresh();
   } catch (err) {
@@ -207,27 +547,246 @@ $('form').addEventListener('submit', async e => {
   }
 });
 
+/* Team picker: suggestions from iGEM's 2026 team list, forgiving of spacing, case and small typos.
+   On leaving the box, whatever was typed snaps to the closest team. */
+let teams = [], teamActive = -1, teamShown = [];
+// Must match team_key() in ui.py.
+const teamKey = s => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function editDistance(a, b) {
+  let prev = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
+}
+function matchTeams(query, limit = 8) {
+  const q = teamKey(query);
+  if (!q) return [];
+  const allowed = Math.max(1, Math.floor(q.length / 3));
+  const ranked = [];
+  for (const t of teams) {
+    let rank;
+    if (t.key === q) rank = 0;
+    else if (t.key.startsWith(q)) rank = 1;
+    else if (t.key.includes(q)) rank = 2;
+    else if (t.cityKey.includes(q)) rank = 3;
+    else {
+      // Typos: compare with the whole name and with its start, so a half-typed name still matches.
+      const d = Math.min(editDistance(q, t.key), ...[-1, 0, 1].map(k => editDistance(q, t.key.slice(0, q.length + k))));
+      if (d > allowed) continue;
+      rank = 4 + d;
+    }
+    ranked.push({t, rank});
+  }
+  ranked.sort((a, b) => a.rank - b.rank || a.t.name.localeCompare(b.t.name));
+  return ranked.slice(0, limit).map(r => r.t);
+}
+function showTeamList(list) {
+  teamShown = list; teamActive = -1;
+  const box = $('teamList'), input = $('team');
+  box.replaceChildren(...list.map((t, i) => {
+    const li = el('li', {id: `team-opt-${i}`, role: 'option'}, el('span', {textContent: t.name}), el('small', {textContent: t.city}));
+    li.setAttribute('aria-selected', 'false');
+    li.addEventListener('mousedown', e => { e.preventDefault(); pickTeam(t); }); // before the input loses focus
+    return li;
+  }));
+  box.hidden = !list.length;
+  input.setAttribute('aria-expanded', list.length > 0);
+  input.removeAttribute('aria-activedescendant');
+}
+function setTeamActive(i) {
+  const items = $('teamList').children;
+  if (!items.length) return;
+  teamActive = (i + items.length) % items.length;
+  [...items].forEach((li, k) => li.setAttribute('aria-selected', k === teamActive));
+  items[teamActive].scrollIntoView({block: 'nearest'});
+  $('team').setAttribute('aria-activedescendant', items[teamActive].id);
+}
+function pickTeam(t) {
+  $('team').value = t.name;
+  $('teamHint').className = 'hint'; $('teamHint').textContent = '';
+  showTeamList([]);
+}
+/* Snap the box to a listed team. False when nothing is close enough. */
+function autocorrectTeam() {
+  const input = $('team'), hint = $('teamHint'), typed = input.value.trim();
+  showTeamList([]);
+  if (!typed || !teams.length) { hint.textContent = ''; return true; }
+  const [best] = matchTeams(typed, 1);
+  if (!best) {
+    hint.className = 'hint err'; hint.textContent = "Not on the 2026 iGEM team list.";
+    return false;
+  }
+  hint.className = 'hint';
+  hint.textContent = best.name === typed ? '' : `Corrected to ${best.name}.`;
+  input.value = best.name;
+  return true;
+}
+$('team').addEventListener('input', () => {
+  $('teamHint').className = 'hint'; $('teamHint').textContent = '';
+  showTeamList(matchTeams($('team').value));
+});
+$('team').addEventListener('focus', () => { if ($('team').value) showTeamList(matchTeams($('team').value)); });
+$('team').addEventListener('blur', autocorrectTeam);
+$('team').addEventListener('keydown', e => {
+  const open = !$('teamList').hidden;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) showTeamList(matchTeams($('team').value));
+    setTeamActive(teamActive + (e.key === 'ArrowDown' ? 1 : -1));
+  } else if (e.key === 'Enter' && open) {
+    e.preventDefault(); // pick, don't submit
+    pickTeam(teamShown[Math.max(0, teamActive)]);
+  } else if (e.key === 'Escape' && open) {
+    e.preventDefault();
+    showTeamList([]);
+  }
+});
+
 /* Runs list */
 const STATE_LABEL = {queued: 'Queued', running: 'Running', cancelled: 'Cancelled',
   failed: 'Failed', interrupted: 'Interrupted'};
+function updateRaceButton() {
+  const n = raceSet.size;
+  $('raceBtn').disabled = n < 2;
+  $('raceBtn').textContent = n ? `Race selected (${n})` : 'Race selected';
+  $('raceHint').textContent = n >= RACE_MAX ? `A race holds up to ${RACE_MAX} runs.`
+    : 'Tick 2 or more finished runs to race them.';
+}
 function renderJobs(jobs) {
+  // Polling shouldn't rebuild the list, and disturb a click, unless something changed.
+  const signature = JSON.stringify([jobs, selected, scoresHidden]);
+  if (signature === jobsSignature) return;
+  jobsSignature = signature;
   const list = $('jobs');
+  for (const id of [...raceSet]) if (!jobs.some(j => j.id === id && j.status === 'done')) raceSet.delete(id);
+  updateRaceButton();
   if (!jobs.length) {
     list.replaceChildren(el('li', {className: 'empty', textContent: 'No runs yet.'}));
     return;
   }
   list.replaceChildren(...jobs.map(j => {
     const right = j.status === 'done'
-      ? el('span', {className: 'val', textContent: j.result.rg_mean.toFixed(2) + ' nm'})
+      ? el('span', scoresHidden
+          ? {className: 'state', textContent: 'Hidden'}
+          : {className: 'val', textContent: j.result.rg_mean.toFixed(2) + ' nm'})
       : el('span', {className: 'state', textContent: j.status === 'running'
           ? `${Math.round(j.progress.fraction * 100)}%` : STATE_LABEL[j.status]});
     const left = el('span', {className: 'title'}, jobTitle(j),
-      el('span', {className: 'sub', textContent: `${j.temp_c} °C · ${j.ionic} M · pH ${j.ph}`}));
+      el('span', {className: 'sub', textContent: `${teamPart(j)}${j.n_residues} residues · ${fmtTarget(j)} · ${fmtNs(j.simulated_ns)} ns`}));
     const b = el('button', {type: 'button'}, left, right);
     if (j.id === selected) b.setAttribute('aria-current', 'true');
     b.addEventListener('click', () => { selected = j.id; shownKey = null; refresh(); });
-    return el('li', {}, b);
+    let tick = el('span', {className: 'no-check'});
+    if (j.status === 'done') {
+      tick = el('input', {type: 'checkbox', checked: raceSet.has(j.id)});
+      tick.setAttribute('aria-label', `Add ${jobTitle(j)} to the race`);
+      tick.addEventListener('change', () => {
+        if (tick.checked && raceSet.size >= RACE_MAX) { tick.checked = false; return; }
+        if (tick.checked) raceSet.add(j.id); else raceSet.delete(j.id);
+        updateRaceButton();
+      });
+    }
+    return el('li', {}, tick, b);
   }));
+}
+$('raceBtn').addEventListener('click', () => startRace([...raceSet]));
+
+function updateScoresButton() {
+  $('scoresBtn').textContent = scoresHidden ? 'Show Rg & score' : 'Hide Rg & score';
+  $('scoresBtn').setAttribute('aria-pressed', scoresHidden);
+}
+$('scoresBtn').addEventListener('click', () => {
+  scoresHidden = !scoresHidden;
+  localStorage.setItem('scoresHidden', scoresHidden ? '1' : '0');
+  updateScoresButton();
+  shownKey = null;
+  refresh();
+});
+updateScoresButton();
+
+/* Run pictures */
+const PICTURE_MAX_PX = 1024;
+function pictureZone(id, hasImage) {
+  const zone = el('div', {id: 'picture', className: 'picture'});
+  zone.dataset.job = id;
+  fillPicture(zone, hasImage);
+  return zone;
+}
+function fillPicture(zone, hasImage, message = '') {
+  const id = zone.dataset.job;
+  const input = el('input', {type: 'file', accept: 'image/*', hidden: true});
+  input.addEventListener('change', () => { if (input.files[0]) setPicture(id, input.files[0]); });
+  const choose = el('button', {type: 'button', textContent: 'Choose file'});
+  choose.addEventListener('click', () => input.click());
+  const buttons = el('div', {className: 'buttons'}, choose, input);
+  if (hasImage) {
+    const remove = el('button', {type: 'button', textContent: 'Remove'});
+    remove.addEventListener('click', () => setPicture(id, null));
+    buttons.append(remove);
+  }
+  const text = el('div', {},
+    el('div', {className: message ? 'hint err' : 'hint',
+      textContent: message || (hasImage ? 'Paste with Ctrl+V to replace this picture.' : 'Paste a picture for this run with Ctrl+V.')}),
+    buttons);
+  zone.replaceChildren(...(hasImage ? [el('img', {src: `/api/jobs/${id}/image?v=${Date.now()}`, alt: 'Picture for this run'})] : []), text);
+}
+async function toPngDataUrl(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, PICTURE_MAX_PX / Math.max(bitmap.width, bitmap.height));
+  const canvas = el('canvas', {width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale)});
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL('image/png');
+}
+async function setPicture(id, file) {
+  const shown = () => { const z = $('picture'); return z && z.dataset.job === id ? z : null; };
+  try {
+    let data = null;
+    if (file) {
+      try {
+        data = await toPngDataUrl(file);
+      } catch {
+        throw new Error("That file isn't a picture this browser can read.");
+      }
+    }
+    await api(`/api/jobs/${id}/image`, {data});
+    if (shown()) fillPicture(shown(), file !== null);
+  } catch (err) {
+    const zone = shown();
+    if (zone) fillPicture(zone, zone.querySelector('img') !== null, err.message);
+  }
+}
+document.addEventListener('paste', e => {
+  const zone = $('picture');
+  if (!zone || document.body.classList.contains('racing')) return;
+  if (e.target.closest && e.target.closest('input, textarea')) return;
+  const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  e.preventDefault();
+  setPicture(zone.dataset.job, item.getAsFile());
+});
+
+/* Scoring, shared with the race (race.js). Tissue bounds match RG_REGIONS there. */
+const RG_MAX_POINTS = 900;
+const RG_POINTS_PER_NM = 100;
+const TISSUE_BONUS = 50;
+const TISSUE_BOUNDS = [{name: 'Bone', below: 4}, {name: 'Skin', below: 5}, {name: 'Brain', below: Infinity}];
+const tissueOf = v => TISSUE_BOUNDS.find(t => v < t.below).name;
+function scoreParts(target, rg, blocks) {
+  const rgPts = RG_MAX_POINTS - Math.abs(rg - target) * RG_POINTS_PER_NM;
+  const tissue = tissueOf(target);
+  const tissuePts = blocks.adhesion_tissues.includes(tissue) ? TISSUE_BONUS : 0;
+  return {rgPts, tissue, tissuePts, variationPts: blocks.variation_pts, total: rgPts + blocks.variation_pts + tissuePts};
+}
+function scoreBlock(d) {
+  if (d.target_rg == null) return el('p', {className: 'meta', textContent: 'This run was made before targets, so it has no score.'});
+  const p = scoreParts(d.target_rg, d.result.rg_mean, d.blocks), n = d.blocks.types.length;
+  let detail = `Rg ${Math.round(p.rgPts)} (target ${d.target_rg} nm, ${p.tissue.toLowerCase()}) · +${p.variationPts} variation (${n} block type${n === 1 ? '' : 's'})`;
+  if (p.tissuePts) detail += ` · +${p.tissuePts} ${p.tissue.toLowerCase()} adhesion`;
+  return el('div', {className: 'score'}, el('b', {textContent: `${Math.round(p.total)} pts`}), el('span', {textContent: detail}));
 }
 
 /* Result panel */
@@ -253,6 +812,7 @@ async function renderDetail(job) {
     const wrap = el('div', {},
       el('h2', {className: 'title', textContent: jobTitle(job)}),
       el('p', {className: 'meta', textContent: `${jobMeta(job)} · ${fmtNs(job.simulated_ns)} ns simulated`}),
+      pictureZone(job.id, job.has_image),
       el('div', {className: 'bar'}, fill),
       statusLine,
       cancel);
@@ -261,12 +821,13 @@ async function renderDetail(job) {
     return;
   }
 
-  const key = job.id + job.status;
+  const key = `${job.id} ${job.status} ${scoresHidden}`;
   if (key === shownKey) return;
   shownKey = key;
   const d = await api(`/api/jobs/${job.id}`);
   const head = [el('h2', {className: 'title', textContent: jobTitle(d)}),
-                el('p', {className: 'meta', textContent: jobMeta(d)})];
+                el('p', {className: 'meta', textContent: jobMeta(d)}),
+                pictureZone(d.id, d.has_image)];
 
   if (d.status !== 'done') {
     const body = {
@@ -280,25 +841,39 @@ async function renderDetail(job) {
   }
 
   const r = d.result;
+  const stat = (label, value) => el('div', {}, el('b', {textContent: value}), label);
+  const runStats = [
+    stat('Frames used', `${r.frames_used} of ${r.frames_used + r.frames_discarded}`),
+    stat('Simulated', `${fmtNs(d.simulated_ns)} ns on ${r.platform}`)];
+  const files = el('details', {}, el('summary', {textContent: 'Sequence and files'}),
+    el('code', {textContent: d.sequence}),
+    el('code', {textContent: `Folder: runs/${d.id}/`}));
+
+  if (scoresHidden) {
+    panel.replaceChildren(...head,
+      el('div', {className: 'note warn', textContent: '🔒 Rg and score are hidden. Press Show Rg & score, or race this run to see them.'}),
+      el('div', {className: 'stats'}, ...runStats),
+      files);
+    chartData = null;
+    return;
+  }
+
   const parts = [...head,
     el('div', {className: 'hero'}, `${r.rg_mean.toFixed(2)} `,
       el('small', {textContent: `± ${r.rg_sem.toFixed(2)} nm`})),
-    el('p', {className: 'meta', textContent: 'Cumulative Rg at the end of the run ± standard error from block averaging'})];
+    el('p', {className: 'meta', textContent: 'Cumulative Rg at the end of the run ± standard error from block averaging'}),
+    scoreBlock(d)];
   if (!r.settled) parts.push(el('div', {className: 'note warn',
     textContent: `⚠ Not settled: the first half averages ${r.first_half.toFixed(2)} nm and the second ${r.second_half.toFixed(2)} nm. Use a longer run before relying on this value.`}));
-  const stat = (label, value) => el('div', {}, el('b', {textContent: value}), label);
   parts.push(el('div', {className: 'stats'},
     stat('Frame-to-frame SD', `${r.rg_std.toFixed(2)} nm`),
     stat('First half', `${r.first_half.toFixed(2)} nm`),
     stat('Second half', `${r.second_half.toFixed(2)} nm`),
-    stat('Frames used', `${r.frames_used} of ${r.frames_used + r.frames_discarded}`),
-    stat('Simulated', `${fmtNs(d.simulated_ns)} ns on ${r.platform}`)));
+    ...runStats));
   parts.push(el('div', {id: 'chart'}));
   parts.push(el('div', {className: 'actions'},
     el('a', {href: `/api/jobs/${d.id}/rg.csv`, textContent: 'Download cumulative and per-frame Rg (CSV)'})));
-  parts.push(el('details', {}, el('summary', {textContent: 'Sequence and files'}),
-    el('code', {textContent: d.sequence}),
-    el('code', {textContent: `Folder: runs/${d.id}/`})));
+  parts.push(files);
   panel.replaceChildren(...parts);
   chartData = {t: d.series.time_ns, rg: d.series.rg_nm, cum: d.series.cumulative_nm, skip: r.frames_discarded};
   drawChart();
@@ -315,7 +890,8 @@ function niceTicks(lo, hi, count) {
 const MIN_CUMULATIVE_SPAN = 0.2; // nm; keeps small wobbles from filling the panel
 function drawChart() {
   const host = $('chart');
-  if (!host || !chartData) return;
+  // clientWidth is 0 while the race view hides this panel.
+  if (!host || !chartData || !host.clientWidth) return;
   const {t, rg, cum, skip} = chartData;
   const W = host.clientWidth, H = 470, left = 44, right = 16, tEnd = t[t.length - 1];
   const x = v => left + (v / tEnd) * (W - left - right);
@@ -360,7 +936,7 @@ function drawChart() {
   for (const v of niceTicks(0, tEnd, Math.max(3, Math.floor(W / 110))).ticks) {
     root.append(svg('text', {x: x(v), y: axisY + 18, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--text-3)'}, v));
   }
-  root.append(svg('text', {x: (left + W - right) / 2, y: H - 12, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--text-2)'}, 'Simulated time (ns). Grey section: equilibration, excluded from the cumulative Rg.'));
+  root.append(svg('text', {x: (left + W - right) / 2, y: H - 12, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--text-2)'}, 'Simulated time (ns). Shaded section: equilibration, excluded from the cumulative Rg.'));
 
   const cross = svg('line', {y1: topA, y2: axisY, stroke: 'var(--text-3)', visibility: 'hidden'});
   const dotCum = svg('circle', {r: 4, fill: 'var(--series)', stroke: 'var(--surface)', 'stroke-width': 2, visibility: 'hidden'});
@@ -405,20 +981,79 @@ function drawChart() {
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawChart, 100); });
 
+/* Banner decoration, as on the wiki: drifting colour blobs and MOSAIC glass tiles.
+   It pauses during a simulation or race, because it would share the GPU with them. */
+const ASSETS = 'https://static.igem.wiki/teams/6110/wiki';
+const MOSAIC = [...'mosaic'];
+const BLOBS = [['18,161,80', 42], ['31,107,255', 46], ['232,54,46', 48], ['246,179,1', 50], ['242,77,16', 46], ['168,85,247', 55]];
+const BLOB_ALPHA = 0.95, BLOB_TICK_MS = 66, TILE_COUNT = 90, TILE_SWAP_MS = 1500;
+const stillMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let jobsBusy = false;
+const decorationPaused = () => stillMotion || jobsBusy || document.hidden || document.body.classList.contains('racing');
+const randomPoint = () => [0.05 + Math.random() * 0.9, 0.05 + Math.random() * 0.9];
+const blobLegs = BLOBS.map(() => { const at = randomPoint(); return {from: at, to: randomPoint(), t: Math.random(), dur: 6 + Math.random() * 6}; });
+function drawBlobs() {
+  const c = $('blobs'), g = c.getContext('2d'), w = c.width, h = c.height;
+  g.clearRect(0, 0, w, h);
+  blobLegs.forEach((leg, i) => {
+    const e = leg.t * leg.t * (3 - 2 * leg.t);
+    const x = (leg.from[0] + (leg.to[0] - leg.from[0]) * e) * w, y = (leg.from[1] + (leg.to[1] - leg.from[1]) * e) * h;
+    const r = Math.max(1, Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) * BLOBS[i][1] / 100);
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(${BLOBS[i][0]},${BLOB_ALPHA})`);
+    grad.addColorStop(1, `rgba(${BLOBS[i][0]},0)`);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+  });
+}
+function sizeBlobs() {
+  const c = $('blobs');
+  c.width = Math.ceil(c.clientWidth / 2); c.height = Math.ceil(c.clientHeight / 2);
+  drawBlobs();
+}
+setInterval(() => {
+  if (decorationPaused()) return;
+  for (const leg of blobLegs) {
+    leg.t += BLOB_TICK_MS / 1000 / leg.dur;
+    if (leg.t >= 1) { leg.from = leg.to; leg.to = randomPoint(); leg.t = 0; leg.dur = 6 + Math.random() * 6; }
+  }
+  drawBlobs();
+}, BLOB_TICK_MS);
+new ResizeObserver(sizeBlobs).observe($('blobs'));
+
+const randomLetter = () => MOSAIC[Math.floor(Math.random() * MOSAIC.length)];
+function setTile(tile, letter) {
+  const image = `url(${ASSETS}/home/glass-tiles/${letter}.avif)`;
+  tile.style.webkitMaskImage = image;
+  tile.style.maskImage = image;
+}
+const tiles = Array.from({length: TILE_COUNT}, () => { const t = el('i'); setTile(t, randomLetter()); return t; });
+$('tileStrip').append(...tiles);
+setInterval(() => {
+  if (decorationPaused()) return;
+  const tile = tiles[Math.floor(Math.random() * tiles.length)];
+  tile.style.opacity = 0;
+  setTimeout(() => { setTile(tile, randomLetter()); tile.style.opacity = ''; }, 700);
+}, TILE_SWAP_MS);
+$('footerTiles').append(...MOSAIC.map(l => el('img', {src: `${ASSETS}/logo/tiles/${l}.avif`, alt: ''})));
+
 /* Polling */
 async function refresh() {
   const jobs = await api('/api/jobs');
+  jobsBusy = jobs.some(j => j.status === 'running' || j.status === 'queued');
   if (!selected && jobs.length) selected = jobs[0].id;
   renderJobs(jobs);
   const job = jobs.find(j => j.id === selected);
   if (job) await renderDetail(job);
 }
 (async () => {
-  presets = await api('/api/presets');
-  renderPresetOptions();
+  settings = await api('/api/settings');
+  teams = (await api('/api/teams')).map(t => ({...t, key: teamKey(t.name), cityKey: teamKey(t.city)}));
+  renderSettings();
   await refresh();
   setInterval(() => refresh().catch(() => {}), 2000);
 })();
 </script>
+<script src="/race.js"></script>
 </body>
 </html>
