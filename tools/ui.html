@@ -133,7 +133,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .jobs button:hover { background: var(--band); }
 .jobs button[aria-current="true"] { background: var(--band); }
 .jobs .sub { display: block; font-size: 12.5px; color: var(--text-3); }
-.jobs .val { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+.jobs .val { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+.jobs .val small { display: block; font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+.runs-sort { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 6px; }
+.runs-sort label { margin: 0; font-size: 12.5px; color: var(--text-3); }
+.runs-sort select { width: auto; padding: 3px 6px; font-size: 13px; }
 .jobs .state { white-space: nowrap; font-size: 13px; color: var(--text-2); }
 .empty { color: var(--text-3); }
 .hero { font-family: var(--heading); font-size: 52px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -272,6 +276,14 @@ button.race-play { width: auto; min-width: 110px; }
           <button type="button" id="scoresBtn"></button>
           <button type="button" id="raceBtn" disabled>Race selected</button>
         </div>
+      </div>
+      <div class="runs-sort">
+        <label for="sortRuns">Sort</label>
+        <select id="sortRuns">
+          <option value="newest">Newest first</option>
+          <option value="score">Highest score</option>
+          <option value="rg">Largest Rg</option>
+        </select>
       </div>
       <ul class="jobs" id="jobs"></ul>
       <div class="hint" id="raceHint">Tick 2 or more finished runs to race them.</div>
@@ -655,9 +667,36 @@ function updateRaceButton() {
   $('raceHint').textContent = n >= RACE_MAX ? `A race holds up to ${RACE_MAX} runs.`
     : 'Tick 2 or more finished runs to race them.';
 }
+/* Score of a finished run with a target, else null. */
+const jobScore = j => (j.status === 'done' && j.target_rg != null
+  ? scoreParts(j.target_rg, j.result.rg_mean, j.blocks).total : null);
+// Sorting by score or Rg would give away the ranking, so it waits until results are shown.
+function sortedJobs(jobs) {
+  if (scoresHidden || sortRuns === 'newest') return jobs;
+  const key = sortRuns === 'score' ? jobScore : j => (j.status === 'done' ? j.result.rg_mean : null);
+  // Runs without a value keep their newest-first order below the ranked ones.
+  return [...jobs].sort((a, b) => {
+    const ka = key(a), kb = key(b);
+    if (ka === null || kb === null) return (ka === null) - (kb === null);
+    return kb - ka;
+  });
+}
+function updateSortControl() {
+  const select = $('sortRuns');
+  for (const o of select.options) o.disabled = scoresHidden && o.value !== 'newest';
+  select.value = scoresHidden ? 'newest' : sortRuns;
+  select.title = scoresHidden ? 'Show Rg & score to sort by them' : '';
+}
+let sortRuns = 'newest';
+try { sortRuns = localStorage.getItem('sortRuns') || 'newest'; } catch {}
+$('sortRuns').addEventListener('change', () => {
+  sortRuns = $('sortRuns').value;
+  try { localStorage.setItem('sortRuns', sortRuns); } catch {}
+  refresh();
+});
 function renderJobs(jobs) {
   // Polling shouldn't rebuild the list, and disturb a click, unless something changed.
-  const signature = JSON.stringify([jobs, selected, scoresHidden]);
+  const signature = JSON.stringify([jobs, selected, scoresHidden, sortRuns]);
   if (signature === jobsSignature) return;
   jobsSignature = signature;
   const list = $('jobs');
@@ -667,11 +706,14 @@ function renderJobs(jobs) {
     list.replaceChildren(el('li', {className: 'empty', textContent: 'No runs yet.'}));
     return;
   }
-  list.replaceChildren(...jobs.map(j => {
+  list.replaceChildren(...sortedJobs(jobs).map(j => {
+    const pts = jobScore(j), rgText = j.status === 'done' ? j.result.rg_mean.toFixed(2) + ' nm' : '';
     const right = j.status === 'done'
-      ? el('span', scoresHidden
-          ? {className: 'state', textContent: 'Hidden'}
-          : {className: 'val', textContent: j.result.rg_mean.toFixed(2) + ' nm'})
+      ? (scoresHidden
+          ? el('span', {className: 'state', textContent: 'Hidden'})
+          : pts === null
+            ? el('span', {className: 'val', textContent: rgText})
+            : el('span', {className: 'val'}, `${Math.round(pts)} pts`, el('small', {textContent: rgText})))
       : el('span', {className: 'state', textContent: j.status === 'running'
           ? `${Math.round(j.progress.fraction * 100)}%` : STATE_LABEL[j.status]});
     const left = el('span', {className: 'title'}, jobTitle(j),
@@ -697,6 +739,7 @@ $('raceBtn').addEventListener('click', () => startRace([...raceSet]));
 function updateScoresButton() {
   $('scoresBtn').textContent = scoresHidden ? 'Show Rg & score' : 'Hide Rg & score';
   $('scoresBtn').setAttribute('aria-pressed', scoresHidden);
+  updateSortControl();
 }
 $('scoresBtn').addEventListener('click', () => {
   scoresHidden = !scoresHidden;
